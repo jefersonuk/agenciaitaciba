@@ -664,61 +664,60 @@ prod_label = selected_products_label(products, selected_set)
 # ==========================================================
 # KPIs (Saldo snapshot + Rendas acumulado) + faróis
 # ==========================================================
-def sum_at_date(dff_: pd.DataFrame, tipo: str, col: str, dt: pd.Timestamp) -> float:
-    x = dff_[(dff_["tipo"] == tipo) & (dff_["data"] == dt)][col]
-    if col == "realizado":
-        return float(x.sum(min_count=1))
-    return float(x.sum(skipna=True))
-
-
-# Saldo: último mês com realizado “concreto” (não nulo e != 0)
-saldo_last_real_dt = last_real_date_with_data(dff, "Saldo", "realizado", eps=0.0001)
-saldo_real_last = sum_at_date(dff, "Saldo", "realizado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
-saldo_orc_same = sum_at_date(dff, "Saldo", "orcado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
-saldo_gap = (saldo_real_last - saldo_orc_same) if (saldo_last_real_dt is not None and not np.isnan(saldo_orc_same)) else np.nan
-
-# Rendas: acumulado no recorte
-r = dff[dff["tipo"] == "Rendas"]
-rendas_orc = float(r["orcado"].sum(skipna=True))
-rendas_real = float(r["realizado"].sum(min_count=1))
-
-# Faróis
-saldo_farol_txt, saldo_farol_color = kpi_status(saldo_real_last, saldo_orc_same)
-rendas_farol_txt, rendas_farol_color = kpi_status(rendas_real, rendas_orc)
-
 st.markdown('<p class="section-title">KPIs</p>', unsafe_allow_html=True)
-st.markdown(
-    f"""
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
-        <p class="kpi-value">{fmt_br(saldo_real_last)}</p>
-        {badge_html(saldo_farol_txt, saldo_farol_color)}
-        
 
-      <div class="kpi-card">
-        <div class="kpi-label">Saldo • Gap vs Orçado (mesmo mês)</div>
-        <p class="kpi-value">{fmt_br(saldo_gap)}</p>
-        <div class="kpi-sub">Comparação no mês-base do realizado.</div>
-      </div>
-
-      <div class="kpi-card">
-        <div class="kpi-label">Rendas • Orçado (acumulado no recorte)</div>
-        <p class="kpi-value">{fmt_br(rendas_orc)}</p>
-      </div>
-
-      <div class="kpi-card">
-        <div class="kpi-label">Rendas • Realizado (acumulado no recorte)</div>
-        <p class="kpi-value">{fmt_br(rendas_real)}</p>
-        {badge_html(rendas_farol_txt, rendas_farol_color)}
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+c1, c2, c3, c4 = st.columns(4, gap="small")
 
 base_txt = saldo_last_real_dt.strftime("%b/%Y") if saldo_last_real_dt is not None else "—"
-st.caption(f"Base do Saldo (último mês com dado): {base_txt}")
+
+with c1:
+    st.markdown(
+        f"""
+        <div class="kpi-card-native">
+          <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
+          <p class="kpi-value">{fmt_br(saldo_real_last)}</p>
+          {badge_html(saldo_farol_txt, saldo_farol_color)}
+          <div class="kpi-sub">Base: <b>{base_txt}</b></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with c2:
+    st.markdown(
+        f"""
+        <div class="kpi-card-native">
+          <div class="kpi-label">Saldo • Gap vs Orçado (mesmo mês)</div>
+          <p class="kpi-value">{fmt_br(saldo_gap)}</p>
+          <div class="kpi-sub">Comparação no mês-base do realizado.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with c3:
+    st.markdown(
+        f"""
+        <div class="kpi-card-native">
+          <div class="kpi-label">Rendas • Orçado (acumulado no recorte)</div>
+          <p class="kpi-value">{fmt_br(rendas_orc)}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with c4:
+    st.markdown(
+        f"""
+        <div class="kpi-card-native">
+          <div class="kpi-label">Rendas • Realizado (acumulado no recorte)</div>
+          <p class="kpi-value">{fmt_br(rendas_real)}</p>
+          {badge_html(rendas_farol_txt, rendas_farol_color)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 # ==========================================================
 # Gráfico 1: Saldo
