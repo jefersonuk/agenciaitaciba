@@ -995,7 +995,11 @@ st.markdown(
     f'<div class="pill"><span style="opacity:.8">Legenda:</span> <b>{prod_label}</b></div>',
     unsafe_allow_html=True,
 )
-
+with st.expander("DEBUG (remover depois)"):
+    st.write("Anos no df:", sorted(df["ano"].dropna().unique().tolist()))
+    st.write("Anos no df_view:", sorted(df_view["ano"].dropna().unique().tolist()))
+    st.write("Linhas 2026 no df_view:", int((df_view["ano"] == 2026).sum()))
+    st.dataframe(df_view[df_view["ano"] == 2026].head(10))
 ts_saldo = build_timeseries(df_view, "saldo")
 if ts_saldo.empty:
     st.info("Sem dados de Saldo para o recorte atual.")
