@@ -45,7 +45,9 @@ st.set_page_config(
 st.markdown(
     f"""
 <style>
-/* Aplica no container do Streamlit (isso impede voltar pro tema claro) */
+/* =========================
+   Base / App container
+========================= */
 div[data-testid="stAppViewContainer"] {{
   background: radial-gradient(1200px 700px at 20% 10%, rgba(30,10,232,0.18), transparent 60%),
               radial-gradient(900px 600px at 85% 0%, rgba(0,171,22,0.14), transparent 55%),
@@ -66,12 +68,10 @@ section[data-testid="stSidebar"] {{
   padding-top: 1.2rem;
   padding-bottom: 2rem;
 }}
-</style>
-""",
-    unsafe_allow_html=True,
-)
 
-
+/* =========================
+   Header
+========================= */
 .header-wrap {{
   border: 1px solid {BRAND["border"]};
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
@@ -113,6 +113,9 @@ section[data-testid="stSidebar"] {{
   display:inline-block;
 }}
 
+/* =========================
+   Sections / KPI / Pills
+========================= */
 .section-title {{
   font-size: 18px;
   font-weight: 900;
@@ -172,6 +175,9 @@ section[data-testid="stSidebar"] {{
   margin: 2px 0 10px 0;
 }}
 
+/* =========================
+   Chart Card
+========================= */
 .chart-card {{
   border: 1px solid {BRAND["border"]};
   background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
@@ -189,6 +195,7 @@ hr {{
 """,
     unsafe_allow_html=True,
 )
+
 
 
 # ==========================
