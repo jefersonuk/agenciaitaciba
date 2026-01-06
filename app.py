@@ -628,7 +628,7 @@ with c1:
           <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
           <p class="kpi-value">{fmt_br(saldo_real_last)}</p>
           {badge_html(saldo_farol_txt, saldo_farol_color)}
-          <div class="kpi-sub">Base: <b>{base_txt}</b></div>
+          
         </div>
         """,
         unsafe_allow_html=True,
@@ -668,6 +668,7 @@ with c4:
         """,
         unsafe_allow_html=True,
     )
+st.caption(f"Base do Saldo (último mês com dado): {base_txt}")
 
 # ==========================================================
 # Saldo chart
