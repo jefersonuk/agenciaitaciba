@@ -637,12 +637,16 @@ prod_sel = st.sidebar.multiselect("Produto (multi)", prod_labels, default=defaul
 # ==========================
 # Aplica filtros
 # ==========================
-df_view = df.copy()
 
+# ✅ NOVO: df_period aplica SOMENTE período (sem produto)
+df_period = df.copy()
 if periodo == "Ano":
-    df_view = df_view[df_view["ano"] == ano_sel]
+    df_period = df_period[df_period["ano"] == ano_sel]
 elif periodo == "Mês":
-    df_view = df_view[(df_view["ano"] == ano_sel) & (df_view["mes"] == mes_sel)]
+    df_period = df_period[(df_period["ano"] == ano_sel) & (df_period["mes"] == mes_sel)]
+
+# df_view = período + produto (para os gráficos principais)
+df_view = df_period.copy()
 
 if prod_sel:
     # mapeia label -> cod
@@ -657,27 +661,6 @@ else:
         prod_label = prod_sel[0].split(" - ", 1)[1][:28]
     else:
         prod_label = f"Seleção ({len(prod_sel)})"
-
-
-# ==========================
-# Header
-# ==========================
-st.markdown(
-    f"""
-<div class="header-wrap">
-  <div>
-    <div class="header-title">Itacibá • Carteira de Crédito</div>
-    <div class="header-sub">Orçado x Realizado (2025) • Orçado (2026) • filtros por período e produto</div>
-  </div>
-  <div class="legend-pill">
-    <span><span class="dot" style="background:{BRAND["blue"]}"></span> Orçado</span>
-    <span><span class="dot" style="background:{BRAND["green"]}"></span> Realizado</span>
-  </div>
-</div>
-""",
-    unsafe_allow_html=True,
-)
-
 
 # ==========================
 # KPIs
