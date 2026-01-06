@@ -243,6 +243,116 @@ def make_plotly_template() -> go.layout.Template:
 inject_css()
 px.defaults.template = make_plotly_template()
 
+st.markdown(
+    f"""
+<style>
+/* =========================================================
+   SIDEBAR — visual premium (cards + contraste)
+   ========================================================= */
+
+section[data-testid="stSidebar"] {{
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)) !important;
+  border-right: 1px solid {BRAND["border"]} !important;
+}}
+
+section[data-testid="stSidebar"] * {{
+  color: {BRAND["ink"]};
+}}
+
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] small {{
+  color: {BRAND["muted"]} !important;
+}}
+
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 {{
+  color: {BRAND["ink"]} !important;
+  letter-spacing: -0.2px;
+}}
+
+section[data-testid="stSidebar"] .sb-title {{
+  font-size: 14px;
+  font-weight: 900;
+  color: {BRAND["ink"]};
+  margin: 0 0 10px 0;
+}}
+
+section[data-testid="stSidebar"] .sb-card {{
+  border: 1px solid {BRAND["border"]};
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+  border-radius: 16px;
+  padding: 12px 12px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+  margin-bottom: 12px;
+}}
+
+section[data-testid="stSidebar"] .sb-card .sb-card-title {{
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: -0.2px;
+  color: {BRAND["ink"]};
+  opacity: .95;
+  margin-bottom: 10px;
+}}
+
+section[data-testid="stSidebar"] .sb-helper {{
+  font-size: 11px;
+  color: {BRAND["muted"]};
+  opacity: .9;
+  margin-top: 6px;
+}}
+
+/* Uploader */
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] > div {{
+  border-radius: 14px !important;
+  border: 1px dashed rgba(242,246,255,0.22) !important;
+  background: rgba(0,0,0,0.18) !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {{
+  border-radius: 12px !important;
+  border: 1px solid {BRAND["border"]} !important;
+  background: rgba(255,255,255,0.06) !important;
+  color: {BRAND["ink"]} !important;
+}}
+
+/* Inputs (Selectbox / Multiselect) baseweb */
+section[data-testid="stSidebar"] div[data-baseweb="select"] > div {{
+  border-radius: 14px !important;
+  border: 1px solid {BRAND["border"]} !important;
+  background: rgba(0,0,0,0.20) !important;
+}}
+section[data-testid="stSidebar"] div[data-baseweb="select"] span {{
+  color: {BRAND["ink"]} !important;
+}}
+
+/* Tags do multiselect (chips) */
+section[data-testid="stSidebar"] span[data-baseweb="tag"] {{
+  border-radius: 999px !important;
+  background: rgba(43,89,255,0.25) !important;
+  border: 1px solid rgba(43,89,255,0.35) !important;
+}}
+section[data-testid="stSidebar"] span[data-baseweb="tag"] * {{
+  color: {BRAND["ink"]} !important;
+  font-weight: 800 !important;
+}}
+
+/* Radio “Período” */
+section[data-testid="stSidebar"] [role="radiogroup"] {{
+  background: rgba(0,0,0,0.18);
+  border: 1px solid {BRAND["border"]};
+  border-radius: 14px;
+  padding: 10px 10px;
+}}
+section[data-testid="stSidebar"] [role="radiogroup"] label {{
+  font-weight: 800;
+  color: {BRAND["ink"]} !important;
+}}
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
 # ==========================================================
 # Helpers
