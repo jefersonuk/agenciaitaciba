@@ -617,17 +617,20 @@ else:
 # ==========================================================
 # Representatividade (Top 5 Rendas) - no recorte de tempo
 # ==========================================================
+# ==========================================================
+# Representatividade (Top 5 Rendas)
+# ==========================================================
 st.markdown('<p class="section-title">Representatividade • Produtos (Rendas)</p>', unsafe_allow_html=True)
 
 rep = top5_representatividade_rendas(df_time)
+
 if rep.empty:
     st.info("Sem dados suficientes de Rendas para calcular representatividade neste recorte.")
 else:
-   metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
-st.markdown(
-    f'<div class="pill"><span style="opacity:.8">Base:</span> <b>Rendas ({metric_lbl})</b> <span style="opacity:.6">• Top 5 + Outros</span></div>',
-    unsafe_allow_html=True
-)
-
+    metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
+    st.markdown(
+        f'<div class="pill"><span style="opacity:.8">Base:</span> <b>Rendas ({metric_lbl})</b> <span style="opacity:.6">• Top 5 + Outros</span></div>',
+        unsafe_allow_html=True,
+    )
     st.plotly_chart(representatividade_figure(rep), use_container_width=True)
     st.caption("Top 5 + Outros. TOTAL 18202 é excluído para evitar distorção.")
