@@ -51,17 +51,6 @@ def inject_css() -> None:
     st.markdown(
         f"""
         <style>
-        .kpi-card-native{{
-            background: var(--b-card);
-            border: 1px solid var(--b-border);
-            border-radius: 22px;
-            padding: 16px 16px;
-            box-shadow: 0 18px 50px rgba(0,0,0,0.30);
-          }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap');
 
           :root {{
@@ -108,25 +97,14 @@ def inject_css() -> None:
             margin:4px 0 0 0; color: rgba(242,246,255,0.70); font-size: 13px;
           }}
 
-          .kpi-grid {{
-            display:grid;
-            grid-template-columns: repeat(4, minmax(0,1fr));
-            gap: 12px;
-          }}
-          @media (max-width: 1100px) {{
-            .kpi-grid {{ grid-template-columns: repeat(2, minmax(0,1fr)); }}
-          }}
-          @media (max-width: 650px) {{
-            .kpi-grid {{ grid-template-columns: 1fr; }}
+          .section-title {{
+            font-family: Poppins, Inter, sans-serif;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin: 18px 0 10px 0;
+            color: rgba(242,246,255,0.96);
           }}
 
-          .kpi-card {{
-            background: var(--b-card);
-            border: 1px solid var(--b-border);
-            border-radius: 22px;
-            padding: 16px 16px;
-            box-shadow: 0 18px 50px rgba(0,0,0,0.30);
-          }}
           .kpi-label {{
             color: rgba(242,246,255,0.72);
             font-size: 12px;
@@ -147,12 +125,12 @@ def inject_css() -> None:
             font-size: 12px;
           }}
 
-          .section-title {{
-            font-family: Poppins, Inter, sans-serif;
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            margin: 18px 0 10px 0;
-            color: rgba(242,246,255,0.96);
+          .kpi-card-native {{
+            background: var(--b-card);
+            border: 1px solid var(--b-border);
+            border-radius: 22px;
+            padding: 16px 16px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.30);
           }}
 
           .pill {{
@@ -167,6 +145,7 @@ def inject_css() -> None:
         """,
         unsafe_allow_html=True,
     )
+
 
 
 
