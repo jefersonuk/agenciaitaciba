@@ -354,6 +354,37 @@ section[data-testid="stSidebar"] [role="radiogroup"] label {{
     unsafe_allow_html=True,
 )
 
+def parse_part(dfmat: pd.DataFrame, year: int, has_realizado: bool) -> pd.DataFrame:
+    # ---------------- split 2025 / 2026 ----------------
+    i25 = find_year_start(raw, 2025)
+    i26 = find_year_start(raw, 2026)
+
+    # se não achar “2025” explícito, assume tudo como bloco 2025
+    if i25 is None:
+        i25 = 0
+
+    if i26 is None:
+        block25 = raw.iloc[i25:].copy()
+        df_2025 = parse_part(block25, 2025, has_realizado=True)
+        df = df_2025
+    else:
+        block25 = raw.iloc[i25:i26].copy()
+        block26 = raw.iloc[i26:].copy()
+
+        df_2025 = parse_part(block25, 2025, has_realizado=True)
+        df_2026 = parse_part(block26, 2026, has_realizado=False)
+        df = pd.concat([df_2025, df_2026], ignore_index=True)
+
+    if df.empty:
+        return pd.DataFrame(columns=cols_final)
+
+    # limpeza final
+    df["produto_cod"] = df["produto_cod"].astype(str)
+    df["produto"] = df["produto"].astype(str)
+    df["tipo"] = df["tipo"].astype(str)
+    df = df.sort_values(["data", "produto_cod"]).reset_index(drop=True)
+
+    return df
 # ==========================================================
 # Helpers
 # ==========================================================
@@ -478,37 +509,7 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
                 best_i = i
         return best_i if (best_i is not None and best_score >= 3) else None
 
-    def parse_part(dfmat: pd.DataFrame, year: int, has_realizado: bool) -> pd.DataFrame:
-    # ---------------- split 2025 / 2026 ----------------
-    i25 = find_year_start(raw, 2025)
-    i26 = find_year_start(raw, 2026)
-
-    # se não achar “2025” explícito, assume tudo como bloco 2025
-    if i25 is None:
-        i25 = 0
-
-    if i26 is None:
-        block25 = raw.iloc[i25:].copy()
-        df_2025 = parse_part(block25, 2025, has_realizado=True)
-        df = df_2025
-    else:
-        block25 = raw.iloc[i25:i26].copy()
-        block26 = raw.iloc[i26:].copy()
-
-        df_2025 = parse_part(block25, 2025, has_realizado=True)
-        df_2026 = parse_part(block26, 2026, has_realizado=False)
-        df = pd.concat([df_2025, df_2026], ignore_index=True)
-
-    if df.empty:
-        return pd.DataFrame(columns=cols_final)
-
-    # limpeza final
-    df["produto_cod"] = df["produto_cod"].astype(str)
-    df["produto"] = df["produto"].astype(str)
-    df["tipo"] = df["tipo"].astype(str)
-    df = df.sort_values(["data", "produto_cod"]).reset_index(drop=True)
-
-    return df
+    
 
 
     # --- separa 2025 e 2026 pelo marcador ---
