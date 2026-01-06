@@ -295,6 +295,18 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
     col_code_2025 = raw.columns[0]
     col_desc_2025 = raw.columns[1]
 
+    # limpeza final
+    df["produto_cod"] = df["produto_cod"].astype(str)
+    df["produto"] = df["produto"].astype(str)
+    df["tipo"] = df["tipo"].astype(str)
+
+    # remove linhas completamente vazias
+    df = df[~(df["orcado"].isna() & df["realizado"].isna())].copy()
+    df.sort_values(["data", "produto_cod"], inplace=True)
+
+    return df
+
+    
     # meses 2025 ficam de Unnamed:2 até Unnamed:49 (12 meses x 4 colunas)
     # header row 0 tem os rótulos dos meses
     month_start_cols = []
