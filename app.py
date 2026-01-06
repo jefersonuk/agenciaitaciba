@@ -512,14 +512,20 @@ def sum_at_date(tipo: str, col: str, dt: pd.Timestamp) -> float:
         return float(x.sum(min_count=1))  # evita NaN -> 0
     return float(x.sum(skipna=True))
 
-def last_non_null_date(tipo: str, col: str):
-    x = dff[dff["tipo"] == tipo][["data", col]].dropna()
+def last_real_date_with_data(tipo: str, col: str, eps: float = 0.0001):
+    x = dff[(dff["tipo"] == tipo)][["data", col]].copy()
+    x = x.dropna()
+    # ignora zeros (ex.: mês ainda não fechado)
+    x = x[x[col].abs() > eps]
     if x.empty:
         return None
     return pd.to_datetime(x["data"]).max()
 
+
 # Saldo snapshot no último mês com realizado
-saldo_last_real_dt = last_non_null_date("Saldo", "realizado")
+saldo_last_real_dt = last_real_date_with_data("Saldo", "realizado")
+
+
 saldo_real_last = sum_at_date("Saldo", "realizado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
 saldo_orc_same = sum_at_date("Saldo", "orcado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
 saldo_gap = (saldo_real_last - saldo_orc_same) if (saldo_last_real_dt is not None and not np.isnan(saldo_orc_same)) else np.nan
