@@ -563,17 +563,13 @@ def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
 
     return fig
 
-# --- safety: df_time sempre definido para a seção de representatividade ---
-if "df_time" not in locals():
-    try:
-        df_time = df_filtered.copy()
-    except NameError:
-        df_time = df.copy()
+
 
 # ==========================================================
 st.markdown('<p class="section-title">Representatividade • Produtos (Rendas)</p>', unsafe_allow_html=True)
 
-rep = top5_representatividade_rendas(df_time)
+rep = top5_representatividade_rendas(df_filtered)
+
 
 if rep.empty:
     st.info("Sem dados suficientes de Rendas para calcular representatividade neste recorte.")
