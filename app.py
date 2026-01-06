@@ -1,28 +1,38 @@
+```python
+# app.py
+# Banestes • Itacibá — Carteira de Crédito
+# Dashboard Streamlit + Plotly (dark premium) com parsing fiel ao CSV "wide"
+# Ajustes incluídos:
+# - Tema dark elegante + alto contraste
+# - Layout: 2 gráficos empilhados (Saldo em cima, Rendas embaixo)
+# - Orçado = barras / Realizado = linha (sem “cair pra zero” quando não há dados: NaN para e a linha para)
+# - Hover limpo (sem %{legendgroup})
+# - “Legenda contextual” com produtos selecionados em chip
+# - KPIs: Saldo é snapshot (último mês com dado) + gap vs orçado (mesmo mês); Rendas é acumulado
+# - Removidas infos de debug (amostra/expander) e download desnecessário
+
 import os
 import re
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
+import plotly.express as px
+
 
 # ==========================================================
-# BANESTES DESIGN TOKENS (identidade visual)
+# BANESTES DESIGN TOKENS (dark premium + contraste)
 # ==========================================================
 BRAND = {
     "blue": "#1E0AE8",
     "green": "#00AB16",
-    "ink": "#EAF0FF",          # texto claro
-    "muted": "#9FB0D0",        # texto secundário
-    "bg": "#0B1020",           # fundo dark (não preto)
-    "card": "#111A2E",         # cards/plots
-    "border": "rgba(234, 240, 255, 0.10)",
-    "grid": "rgba(234, 240, 255, 0.08)",
+    "ink": "#F2F6FF",
+    "muted": "#B8C6E6",
+    "bg": "#0A1020",
+    "card": "#0F1830",
+    "border": "rgba(242, 246, 255, 0.12)",
+    "grid": "rgba(242, 246, 255, 0.08)",
 }
-
-
-DISCRETE = [BRAND["blue"], BRAND["green"], "#6D5BFF", "#2DD4BF", "#A78BFA", "#60A5FA"]
-CONT_SCALE = [[0.0, BRAND["blue"]], [1.0, BRAND["green"]]]
 
 st.set_page_config(
     page_title="Banestes | Itacibá — Carteira de Crédito",
@@ -31,7 +41,7 @@ st.set_page_config(
 )
 
 # ==========================================================
-# UI / CSS
+# UI / CSS (premium, menos “quadrado”)
 # ==========================================================
 def inject_css() -> None:
     st.markdown(
@@ -54,14 +64,11 @@ def inject_css() -> None:
             color: var(--b-ink);
           }}
 
-          /* Remove chrome padrão do Streamlit */
           #MainMenu {{ visibility: hidden; }}
           footer {{ visibility: hidden; }}
           header {{ visibility: hidden; }}
 
-          .stApp {{
-            background: var(--b-bg);
-          }}
+          .stApp {{ background: var(--b-bg); }}
 
           section[data-testid="stSidebar"] {{
             background: var(--b-card);
@@ -70,18 +77,19 @@ def inject_css() -> None:
 
           .topbar {{
             display:flex; align-items:center; justify-content:space-between; gap:16px;
-            padding:14px 16px; background: var(--b-card);
-            border: 1px solid var(--b-border); border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(2, 6, 23, 0.04);
+            padding:16px 18px; background: var(--b-card);
+            border: 1px solid var(--b-border); border-radius: 22px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.35);
             margin-bottom: 14px;
           }}
           .title {{
             font-family: Poppins, Inter, sans-serif;
             font-weight: 800; letter-spacing: -0.02em;
             font-size: 20px; margin:0; line-height:1.1;
+            color: rgba(242,246,255,0.98);
           }}
           .subtitle {{
-            margin:2px 0 0 0; color: var(--b-muted); font-size: 13px;
+            margin:4px 0 0 0; color: rgba(242,246,255,0.70); font-size: 13px;
           }}
 
           .kpi-grid {{
@@ -99,48 +107,56 @@ def inject_css() -> None:
           .kpi-card {{
             background: var(--b-card);
             border: 1px solid var(--b-border);
-            border-radius: 16px;
-            padding: 14px;
-            box-shadow: 0 10px 30px rgba(2, 6, 23, 0.04);
+            border-radius: 22px;
+            padding: 16px 16px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.30);
           }}
           .kpi-label {{
-            color: var(--b-muted);
+            color: rgba(242,246,255,0.72);
             font-size: 12px;
             margin-bottom: 6px;
           }}
           .kpi-value {{
             font-family: Poppins, Inter, sans-serif;
             font-weight: 800;
-            font-size: 24px;
+            font-size: 26px;
             letter-spacing: -0.02em;
             margin: 0;
             line-height: 1.05;
+            color: rgba(242,246,255,0.98);
           }}
+
           .section-title {{
             font-family: Poppins, Inter, sans-serif;
             font-weight: 800;
             letter-spacing: -0.02em;
-            margin: 10px 0 8px 0;
+            margin: 18px 0 10px 0;
+            color: rgba(242,246,255,0.96);
           }}
+
           .pill {{
             display:inline-flex; align-items:center; gap:8px;
-            padding: 4px 10px; border-radius: 999px;
+            padding: 6px 12px; border-radius: 999px;
             border: 1px solid var(--b-border);
-            background: rgba(30, 10, 232, 0.06);
+            background: rgba(30, 10, 232, 0.10);
             font-size: 12px;
+            color: rgba(242,246,255,0.92);
           }}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
+
+# ==========================================================
+# Plotly template (compatível e dark)
+# ==========================================================
 def make_plotly_template() -> go.layout.Template:
     t = go.layout.Template()
     t.layout = go.Layout(
         paper_bgcolor=BRAND["bg"],
         plot_bgcolor=BRAND["card"],
         font=dict(family="Inter, system-ui, sans-serif", color=BRAND["ink"], size=13),
-
         xaxis=dict(
             gridcolor=BRAND["grid"],
             zeroline=False,
@@ -159,7 +175,6 @@ def make_plotly_template() -> go.layout.Template:
             tickfont=dict(color=BRAND["muted"]),
             title=dict(text="", font=dict(color=BRAND["muted"])),
         ),
-
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -173,18 +188,18 @@ def make_plotly_template() -> go.layout.Template:
     return t
 
 
-
+# ==========================================================
+# Helpers de formatação e parsing (BR numbers)
+# ==========================================================
 def fmt_br(x: float) -> str:
     if x is None or (isinstance(x, float) and np.isnan(x)):
         return "—"
     s = f"{x:,.2f}"
     return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
-# ==========================================================
-# Parsing helpers (BR locale numbers)
-# ==========================================================
+
 def br_to_float(x) -> float:
-    """Converte string BR (1.234.567,89) -> float. Suporta (123,45) como negativo."""
+    """Converte string BR (1.234.567,89) -> float. Suporta (123,45) negativo."""
     if x is None or (isinstance(x, float) and np.isnan(x)):
         return np.nan
     s = str(x).strip()
@@ -202,39 +217,41 @@ def br_to_float(x) -> float:
         return np.nan
     return -v if neg else v
 
-MONTH_MAP = {"Jan":1,"Fev":2,"Mar":3,"Abr":4,"Mai":5,"Jun":6,"Jul":7,"Ago":8,"Set":9,"Out":10,"Nov":11,"Dez":12}
+
+MONTH_MAP = {"Jan": 1, "Fev": 2, "Mar": 3, "Abr": 4, "Mai": 5, "Jun": 6,
+             "Jul": 7, "Ago": 8, "Set": 9, "Out": 10, "Nov": 11, "Dez": 12}
+
 
 @st.cache_data(show_spinner=False)
 def parse_relatorio(uploaded_file) -> pd.DataFrame:
     """
-    Parser do layout exportado do relatório (formato 'wide'):
-      - 2025: colunas em blocos [Orçado, Realizado] por mês (Jan..Dez)
-      - 2026: colunas por mês com apenas Orçado
-    Retorna dataset tidy com colunas:
-      tipo (Saldo/Rendas), data, ano, mes, produto_cod, produto_desc, produto, orcado, realizado
+    Parser fiel ao relatório no formato wide:
+      - 2025: blocos [Orçado, Realizado] por mês
+      - 2026: apenas Orçado por mês
+    Retorna tidy:
+      tipo, data, ano, mes, produto_cod, produto_desc, produto, orcado, realizado
     """
     raw = pd.read_csv(uploaded_file, sep=None, engine="python", encoding="latin1")
     cols = list(raw.columns)
 
-    # ----- 2025 blocks -----
+    # ----- 2025: colunas padrão do export atual -----
     code_2025 = "2025"
     desc_2025 = "Unnamed: 1"
 
     blocks_2025 = []
-    # no arquivo atual, os blocos começam na coluna index 2 com step 4
     for start in range(2, min(50, len(cols)), 4):
         mlabel = raw.iloc[0, start] if start < len(cols) else None
         if pd.isna(mlabel):
             continue
         mlabel = str(mlabel).strip()
         if mlabel in MONTH_MAP and (start + 1) < len(cols):
-            blocks_2025.append((MONTH_MAP[mlabel], cols[start], cols[start+1]))
+            blocks_2025.append((MONTH_MAP[mlabel], cols[start], cols[start + 1]))
 
-    # ----- 2026 blocks -----
+    # ----- 2026: colunas padrão do export atual -----
     code_2026 = "Unnamed: 50"
     desc_2026 = "Unnamed: 51"
+
     blocks_2026 = []
-    # no arquivo atual, meses 2026 em Unnamed: 53..64 (Jan..Dez)
     for idx in range(53, 65):
         colname = f"Unnamed: {idx}"
         if colname not in raw.columns:
@@ -248,7 +265,7 @@ def parse_relatorio(uploaded_file) -> pd.DataFrame:
 
     records = []
 
-    # ----- rows 2025: começam tipicamente na linha 2 (0=header labels, 1=subheader) -----
+    # 2025 rows (tipicamente começam na linha 2)
     for i in range(2, len(raw)):
         code = raw.at[i, code_2025] if code_2025 in raw.columns else None
         if pd.isna(code):
@@ -277,7 +294,7 @@ def parse_relatorio(uploaded_file) -> pd.DataFrame:
                 "realizado": br_to_float(raw.at[i, c_real]),
             })
 
-    # ----- rows 2026: começam tipicamente na linha 1 -----
+    # 2026 rows (tipicamente começam na linha 1)
     for i in range(1, len(raw)):
         code = raw.at[i, code_2026] if code_2026 in raw.columns else None
         if pd.isna(code):
@@ -303,31 +320,115 @@ def parse_relatorio(uploaded_file) -> pd.DataFrame:
                 "produto_cod": code_str,
                 "produto_desc": desc_str,
                 "orcado": br_to_float(raw.at[i, colname]),
-                "realizado": np.nan,  # 2026 no relatório atual é somente orçado
+                "realizado": np.nan,  # 2026 sem realizado
             })
 
     tidy = pd.DataFrame.from_records(records)
     tidy["produto"] = tidy["produto_cod"] + " - " + tidy["produto_desc"]
     return tidy
 
+
 def safe_drop_totals(selected_codes: set[str]) -> tuple[set[str], list[str]]:
     """
-    Evita dupla contagem: se usuário selecionar TOTAL (18201/18202) e também subprodutos,
-    removemos o TOTAL automaticamente e avisamos.
+    Evita dupla contagem: se selecionar TOTAL (18201/18202) e também subprodutos,
+    removemos o TOTAL automaticamente.
     """
     warnings = []
     out = set(selected_codes)
-
     for total in ["18201", "18202"]:
         has_total = total in out
         has_children = any((c != total and c.startswith(total)) for c in out)
         if has_total and has_children:
             out.remove(total)
             warnings.append(
-                f"Removi automaticamente o TOTAL {total} para evitar dupla contagem (você selecionou subprodutos também)."
+                f"Removi automaticamente o TOTAL {total} para evitar dupla contagem (subprodutos também selecionados)."
             )
-
     return out, warnings
+
+
+def selected_products_label(products_df: pd.DataFrame, selected_codes: set[str], max_items: int = 2) -> str:
+    """Rótulo curto para chip de produtos selecionados."""
+    if not selected_codes:
+        return "Todos os produtos"
+    mp = dict(zip(products_df["produto_cod"], products_df["produto"]))
+    names = [mp.get(c, c) for c in sorted(selected_codes)]
+    if len(names) <= max_items:
+        return " • ".join(names)
+    return " • ".join(names[:max_items]) + f"  +{len(names) - max_items} outros"
+
+
+# ==========================================================
+# Série + gráfico (orçado barras, realizado linha)
+# ==========================================================
+def series_for(dff: pd.DataFrame, tipo: str) -> pd.DataFrame:
+    x = dff[dff["tipo"] == tipo].copy()
+    if x.empty:
+        return x
+    g = x.groupby("data", as_index=False).agg(
+        orcado=("orcado", "sum"),
+        # essencial: se tudo é NaN em uma data (ex: 2026), permanece NaN (linha para)
+        realizado=("realizado", lambda s: s.sum(min_count=1)),
+    )
+    return g.sort_values("data")
+
+
+def bar_line_figure(df_series: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Bar(
+            x=df_series["data"],
+            y=df_series["orcado"],
+            name="Orçado",
+            marker=dict(color=BRAND["blue"], line=dict(width=0)),
+            opacity=0.72,
+            hovertemplate="<b>%{x|%b/%Y}</b><br>Orçado: %{y:,.2f}<extra></extra>",
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=df_series["data"],
+            y=df_series["realizado"],
+            name="Realizado",
+            mode="lines+markers",
+            line=dict(color=BRAND["green"], width=3),
+            marker=dict(size=7),
+            connectgaps=False,
+            hovertemplate="<b>%{x|%b/%Y}</b><br>Realizado: %{y:,.2f}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title_text="",  # evita “undefined”
+        height=520,
+        barmode="overlay",
+        bargap=0.28,
+        legend_title_text="",
+        hovermode="x unified",
+        paper_bgcolor=BRAND["bg"],
+        plot_bgcolor=BRAND["card"],
+        hoverlabel=dict(
+            bgcolor="rgba(15,24,48,0.94)",
+            bordercolor="rgba(242,246,255,0.15)",
+            font=dict(color=BRAND["ink"]),
+        ),
+    )
+
+    fig.update_xaxes(
+        title_text="",
+        tickformat="%b\n%Y",
+        showgrid=False,
+        tickfont=dict(color=BRAND["muted"]),
+    )
+    fig.update_yaxes(
+        title_text="",
+        gridcolor=BRAND["grid"],
+        tickfont=dict(color=BRAND["muted"]),
+        separatethousands=True,
+    )
+    return fig
+
 
 # ==========================================================
 # App
@@ -352,11 +453,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Optional logo
-logo_path = "assets/banestes_logo.png"
-if os.path.exists(logo_path):
-    st.image(logo_path, width=180)
-
 with st.sidebar:
     st.markdown("### Dados")
     uploaded = st.file_uploader("Anexe o relatório (CSV exportado)", type=["csv"])
@@ -373,7 +469,6 @@ df = parse_relatorio(uploaded)
 
 # Period controls
 years = sorted(df["ano"].unique().tolist())
-
 with st.sidebar:
     ano_sel = None
     mes_sel = None
@@ -388,7 +483,7 @@ default_codes = [c for c in ["18201", "18202"] if c in set(products["produto_cod
 
 with st.sidebar:
     selected = st.multiselect(
-        "Produto (multi)",
+        "Produtos (selecione 1 ou mais)",
         options=products["produto_cod"].tolist(),
         default=default_codes,
         format_func=lambda c: products.loc[products["produto_cod"] == c, "produto"].iloc[0],
@@ -406,203 +501,80 @@ if periodo == "Ano" and ano_sel is not None:
 if periodo == "Mês" and ano_sel is not None and mes_sel is not None:
     dff = dff[(dff["ano"] == ano_sel) & (dff["mes"] == mes_sel)]
 
-# =============================
-# KPIs (recorte atual)
-# =============================
-def kpis(tipo: str) -> tuple[float, float]:
-    x = dff[dff["tipo"] == tipo]
-    total_orc = float(x["orcado"].sum(skipna=True))
-    total_real = float(x["realizado"].sum(skipna=True)) if x["realizado"].notna().any() else np.nan
-    return total_orc, total_real
+prod_label = selected_products_label(products, selected_set)
 
-saldo_orc, saldo_real = kpis("Saldo")
-renda_orc, renda_real = kpis("Rendas")
+# ==========================================================
+# KPIs (Saldo snapshot + Rendas acumulado)
+# ==========================================================
+def sum_at_date(tipo: str, col: str, dt: pd.Timestamp) -> float:
+    x = dff[(dff["tipo"] == tipo) & (dff["data"] == dt)][col]
+    if col == "realizado":
+        return float(x.sum(min_count=1))  # evita NaN -> 0
+    return float(x.sum(skipna=True))
 
-st.markdown('<p class="section-title">KPIs do recorte</p>', unsafe_allow_html=True)
+def last_non_null_date(tipo: str, col: str):
+    x = dff[dff["tipo"] == tipo][["data", col]].dropna()
+    if x.empty:
+        return None
+    return pd.to_datetime(x["data"]).max()
+
+# Saldo snapshot no último mês com realizado
+saldo_last_real_dt = last_non_null_date("Saldo", "realizado")
+saldo_real_last = sum_at_date("Saldo", "realizado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
+saldo_orc_same = sum_at_date("Saldo", "orcado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
+saldo_gap = (saldo_real_last - saldo_orc_same) if (saldo_last_real_dt is not None and not np.isnan(saldo_orc_same)) else np.nan
+
+# Rendas acumulado no recorte
+r = dff[dff["tipo"] == "Rendas"]
+rendas_orc = float(r["orcado"].sum(skipna=True))
+rendas_real = float(r["realizado"].sum(min_count=1))
+
+st.markdown('<p class="section-title">KPIs</p>', unsafe_allow_html=True)
 st.markdown(
     f"""
     <div class="kpi-grid">
       <div class="kpi-card">
-        <div class="kpi-label">Saldo • Orçado</div>
-        <p class="kpi-value">{fmt_br(saldo_orc)}</p>
+        <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
+        <p class="kpi-value">{fmt_br(saldo_real_last)}</p>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Saldo • Realizado</div>
-        <p class="kpi-value">{fmt_br(saldo_real)}</p>
+        <div class="kpi-label">Saldo • Gap vs Orçado (mesmo mês)</div>
+        <p class="kpi-value">{fmt_br(saldo_gap)}</p>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Rendas • Orçado</div>
-        <p class="kpi-value">{fmt_br(renda_orc)}</p>
+        <div class="kpi-label">Rendas • Orçado (acumulado no recorte)</div>
+        <p class="kpi-value">{fmt_br(rendas_orc)}</p>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Rendas • Realizado</div>
-        <p class="kpi-value">{fmt_br(renda_real)}</p>
+        <div class="kpi-label">Rendas • Realizado (acumulado no recorte)</div>
+        <p class="kpi-value">{fmt_br(rendas_real)}</p>
       </div>
     </div>
     """,
-    unsafe_allow_html=True,
+    unsafe_allow_html=True
 )
 
-# =============================
-# Charts (2 principais)
-# =============================
-def series_for(tipo: str) -> pd.DataFrame:
-    x = dff[dff["tipo"] == tipo].copy()
-    if x.empty:
-        return x
-
-    g = x.groupby("data", as_index=False).agg(
-        orcado=("orcado", "sum"),
-        realizado=("realizado", lambda s: s.sum(min_count=1)),  # <- ESSENCIAL
-    )
-    return g.sort_values("data")
-
-
-
-def bar_line_figure(df_series: pd.DataFrame) -> go.Figure:
-    fig = go.Figure()
-
-    # Orçado = barras com acabamento
-    fig.add_trace(
-        go.Bar(
-            x=df_series["data"],
-            y=df_series["orcado"],
-            name="Orçado",
-            marker=dict(
-                color=BRAND["blue"],
-                line=dict(width=0),
-            ),
-            opacity=0.75,
-            hovertemplate="<b>%{x|%b/%Y}</b><br>Orçado: %{y:,.2f}<extra></extra>",
-        )
-    )
-
-    # Realizado = linha (não conecta gaps; para quando vira NaN)
-    fig.add_trace(
-        go.Scatter(
-            x=df_series["data"],
-            y=df_series["realizado"],
-            name="Realizado",
-            mode="lines+markers",
-            line=dict(color=BRAND["green"], width=3),
-            marker=dict(size=7),
-            connectgaps=False,
-            hovertemplate="<b>%{x|%b/%Y}</b><br>Realizado: %{y:,.2f}<extra></extra>",
-        )
-    )
-
-    fig.update_layout(
-        # CRÍTICO: não use title=None (gera "undefined")
-        title_text="",
-        height=520,
-        barmode="overlay",
-        bargap=0.25,
-        legend_title_text="",
-        hovermode="x unified",
-        hoverlabel=dict(
-            bgcolor="rgba(17,26,46,0.92)",
-            bordercolor="rgba(234,240,255,0.15)",
-            font=dict(color=BRAND["ink"]),
-        ),
-    )
-
-    # Eixos com cara de produto
-    fig.update_xaxes(
-        title_text="",
-        tickformat="%b\n%Y",
-        showgrid=False,
-        ticks="outside",
-    )
-    fig.update_yaxes(
-        title_text="",
-        gridcolor=BRAND["grid"],
-        separatethousands=True,
-    )
-
-    return fig
-
-
+# ==========================================================
+# Gráfico 1: Saldo (barras + linha)
+# ==========================================================
 st.markdown('<p class="section-title">Evolução • Saldo da Carteira</p>', unsafe_allow_html=True)
-s_saldo = series_for("Saldo")
-st.plotly_chart(bar_line_figure(s_saldo), use_container_width=True)
+st.markdown(f'<div class="pill"><span style="opacity:.8">Produtos:</span> <b>{prod_label}</b></div>', unsafe_allow_html=True)
 
-st.markdown('<p class="section-title">Evolução • Rendas da Carteira</p>', unsafe_allow_html=True)
-s_rendas = series_for("Rendas")
-st.plotly_chart(bar_line_figure(s_rendas), use_container_width=True)
-
-
-
-with col1:
-    st.markdown('<p class="section-title">Evolução • Saldo da Carteira</p>', unsafe_allow_html=True)
-    s = series_for("Saldo")
-    if s.empty:
-        st.info("Sem dados para Saldo nesse recorte.")
-    else:
-        fig = px.line(
-            s,
-            x="data",
-            y="valor",
-            color="cenario",
-            color_discrete_map={"Orçado": BRAND["blue"], "Realizado": BRAND["green"]},
-        )
-        fig.update_layout(height=380, legend_title_text="")
-        fig.update_traces(hovertemplate="<b>%{x|%b/%Y}</b><br>%{legendgroup}: %{y:,.2f}<extra></extra>")
-        st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    st.markdown('<p class="section-title">Evolução • Rendas da Carteira</p>', unsafe_allow_html=True)
-    s = series_for("Rendas")
-    if s.empty:
-        st.info("Sem dados para Rendas nesse recorte.")
-    else:
-        fig = px.line(
-            s,
-            x="data",
-            y="valor",
-            color="cenario",
-            color_discrete_map={"Orçado": BRAND["blue"], "Realizado": BRAND["green"]},
-        )
-        fig.update_layout(height=380, legend_title_text="")
-        fig.update_traces(hovertemplate="<b>%{x|%b/%Y}</b><br>%{legendgroup}: %{y:,.2f}<extra></extra>")
-        st.plotly_chart(fig, use_container_width=True)
-
-# =============================
-# Reconciliação (fidelidade ao relatório)
-# =============================
-st.divider()
-st.markdown('<p class="section-title">Reconciliação (fidelidade ao relatório)</p>', unsafe_allow_html=True)
-
-def check_value(tipo: str, cod: str, dt: pd.Timestamp, col: str, expected: float) -> tuple[bool, float | None]:
-    found = df[(df["tipo"] == tipo) & (df["produto_cod"] == cod) & (df["data"] == dt)][col]
-    if len(found) != 1 or pd.isna(found.iloc[0]):
-        return False, None
-    val = float(found.iloc[0])
-    ok = abs(val - expected) < 0.005  # tolerância de centavos
-    return ok, val
-
-checks = [
-    ("Saldo", "18201", pd.Timestamp(2025, 1, 1),  "orcado",    106_033_327.59, "Saldo (18201) Orçado Jan/2025"),
-    ("Saldo", "18201", pd.Timestamp(2025, 12, 1), "realizado", 0.00,          "Saldo (18201) Realizado Dez/2025"),
-    ("Saldo", "18201", pd.Timestamp(2026, 1, 1),  "orcado",    97_894_933.03, "Saldo (18201) Orçado Jan/2026"),
-]
-
-all_ok = True
-for tipo, cod, dt, col, expected, label in checks:
-    ok, val = check_value(tipo, cod, dt, col, expected)
-    all_ok = all_ok and ok
-    if ok:
-        st.success(f"✅ {label} = {fmt_br(expected)} (bate)")
-    else:
-        st.error(f"❌ {label} esperado {fmt_br(expected)} | encontrado {fmt_br(val) if val is not None else '—'}")
-
-if all_ok:
-    st.success("✅ Reconciliação completa: os controles conferem com o relatório.")
+s_saldo = series_for(dff, "Saldo")
+if s_saldo.empty:
+    st.info("Sem dados para Saldo nesse recorte.")
 else:
-    st.warning("Atenção: houve divergência. Isso pode indicar arquivo diferente, exportação alterada ou layout deslocado.")
+    st.plotly_chart(bar_line_figure(s_saldo), use_container_width=True)
 
-with st.expander("Ver amostra do dataset normalizado (tidy)", expanded=False):
-    st.dataframe(df.head(120), use_container_width=True, height=320)
+# ==========================================================
+# Gráfico 2: Rendas (barras + linha)
+# ==========================================================
+st.markdown('<p class="section-title">Evolução • Rendas da Carteira</p>', unsafe_allow_html=True)
+st.markdown(f'<div class="pill"><span style="opacity:.8">Produtos:</span> <b>{prod_label}</b></div>', unsafe_allow_html=True)
 
-# Download do recorte filtrado (para auditoria)
-csv_bytes = dff.to_csv(index=False).encode("utf-8")
-st.download_button("Baixar recorte filtrado (CSV)", data=csv_bytes, file_name="recorte_filtrado.csv", mime="text/csv")
+s_rendas = series_for(dff, "Rendas")
+if s_rendas.empty:
+    st.info("Sem dados para Rendas nesse recorte.")
+else:
+    st.plotly_chart(bar_line_figure(s_rendas), use_container_width=True)
+```
