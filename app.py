@@ -482,10 +482,19 @@ def make_evolucao_figure(df_view: pd.DataFrame, tipo: str, title: str, prod_labe
     return fig
 
 
-def top5_representatividade_rendas(df_view: pd.DataFrame) -> pd.DataFrame:
-    x = df_view[df_view["tipo"] == "Rendas"].copy()
-    if x.empty:
-        return pd.DataFrame()
+# Fonte da representatividade:
+# - se o usuário selecionou algum 18202xx (não total), usa a seleção
+# - se só selecionou TOTAL (18202) ou nada, usa TODOS os 18202xx do período
+cod_sel = [p.split(" - ")[0].strip() for p in prod_sel] if prod_sel else []
+
+tem_renda_detalhe = any(c.startswith("18202") and c != "18202" for c in cod_sel)
+
+df_rep_source = df_period.copy()
+if tem_renda_detalhe:
+    df_rep_source = df_rep_source[df_rep_source["produto_cod"].isin(cod_sel)]
+
+rep = top5_representatividade_rendas(df_rep_source)
+
 
     # Considera apenas 18202* e exclui TOTAL 18202 para evitar distorção
     x["produto_cod"] = x["produto_cod"].astype(str)
