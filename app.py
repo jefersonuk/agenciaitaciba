@@ -44,7 +44,7 @@ st.set_page_config(
 # UI / CSS (premium, menos “quadrado”)
 # ==========================================================
 def inject_css() -> None:
-   st.markdown('<p class="section-title">KPIs</p>', unsafe_allow_html=True)
+  st.markdown('<p class="section-title">KPIs</p>', unsafe_allow_html=True)
 
 st.markdown(
     f"""
@@ -385,6 +385,46 @@ def bar_line_figure(df_series: pd.DataFrame) -> go.Figure:
     )
     return fig
 
+def top5_representatividade_rendas(dff: pd.DataFrame) -> pd.DataFrame:
+    """
+    Retorna dataframe com Top 5 produtos por renda (Realizado se existir; senão Orçado),
+    com coluna share (%).
+    """
+    x = dff[dff["tipo"] == "Rendas"].copy()
+    if x.empty:
+        return pd.DataFrame()
+
+    # Se existir realizado em algum lugar do recorte, usamos realizado; senão, orçado.
+    has_real = x["realizado"].notna().any() and (x["realizado"].sum(min_count=1) is not np.nan)
+    metric = "realizado" if has_real else "orcado"
+
+    g = (
+        x.groupby(["produto_cod", "produto"], as_index=False)
+         .agg(valor=(metric, lambda s: s.sum(min_count=1)))
+    )
+
+    g = g.dropna()
+    g = g[g["valor"] > 0]
+    if g.empty:
+        return pd.DataFrame()
+
+    g = g.sort_values("valor", ascending=False)
+
+    top5 = g.head(5).copy()
+    rest = g.iloc[5:]["valor"].sum() if len(g) > 5 else 0.0
+
+    if rest > 0:
+        top5 = pd.concat(
+            [top5, pd.DataFrame([{"produto_cod": "OUTROS", "produto": "Outros", "valor": rest}])],
+            ignore_index=True,
+        )
+
+    total = float(top5["valor"].sum())
+    top5["share"] = top5["valor"] / total
+    top5["metric"] = metric
+    return top5
+
+
 
 # ==========================================================
 # App
@@ -542,4 +582,5 @@ else:
 
 saldo_farol_txt, saldo_farol_color = kpi_status(saldo_real_last, saldo_orc_same)
 rendas_farol_txt, rendas_farol_color = kpi_status(rendas_real, rendas_orc)
+
 
