@@ -265,6 +265,33 @@ def normalize_month_label(x: str) -> str | None:
     s = re.sub(r"[^a-zç]", "", s)
     s = s[:3]
     return s if s in PT_MONTH else None
+def apply_dark_plotly(fig: go.Figure) -> go.Figure:
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(
+            bgcolor="rgba(0,0,0,0)",
+            font=dict(color=BRAND["muted"], size=12),
+        ),
+        font=dict(color=BRAND["ink"]),
+        margin=dict(l=10, r=10, t=45, b=10),
+    )
+    fig.update_xaxes(
+        color=BRAND["muted"],
+        gridcolor=BRAND["grid"],
+        zerolinecolor=BRAND["grid"],
+        tickfont=dict(color=BRAND["muted"]),
+        titlefont=dict(color=BRAND["muted"]),
+    )
+    fig.update_yaxes(
+        color=BRAND["muted"],
+        gridcolor=BRAND["grid"],
+        zerolinecolor=BRAND["grid"],
+        tickfont=dict(color=BRAND["muted"]),
+        titlefont=dict(color=BRAND["muted"]),
+    )
+    return apply_dark_plotly(fig)
+
 
 
 def parse_ptbr_number(x) -> float:
@@ -471,7 +498,8 @@ def fig_orcado_bar_real_line(ts: pd.DataFrame, title: str, prod_label: str) -> g
         gridcolor=BRAND["grid"],
     )
 
-    return fig
+    return apply_dark_plotly(fig)
+
 
 
 def farol_badge(ok: bool) -> str:
@@ -668,7 +696,8 @@ def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
     xmax = float(rep_plot["valor"].max()) if len(rep_plot) else 0
     fig.update_xaxes(range=[0, xmax * 1.18 if xmax > 0 else 1])
 
-    return fig
+    return apply_dark_plotly(fig)
+
 
 
 # ==========================================================
