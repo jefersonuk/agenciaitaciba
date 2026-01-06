@@ -1,4 +1,4 @@
-```python
+
 # app.py
 # Banestes • Itacibá — Carteira de Crédito
 # Dashboard Streamlit + Plotly (dark premium) com parsing fiel ao CSV "wide"
