@@ -479,9 +479,6 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
         return best_i if (best_i is not None and best_score >= 3) else None
 
     def parse_part(dfmat: pd.DataFrame, year: int, has_realizado: bool) -> pd.DataFrame:
-
-  return df
-
     # ---------------- split 2025 / 2026 ----------------
     i25 = find_year_start(raw, 2025)
     i26 = find_year_start(raw, 2026)
