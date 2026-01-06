@@ -581,7 +581,7 @@ def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
     fig.update_xaxes(range=[0, rep_plot["valor"].max() * 1.12])
 
     return fig
- fig
+
 
 
 # ==========================================================
