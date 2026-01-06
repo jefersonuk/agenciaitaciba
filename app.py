@@ -400,14 +400,15 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
 
     df = pd.concat([df_2025, df_2026], ignore_index=True)
 
-    # limpeza final
-    df["produto_cod"] = df["produto_cod"].astype(str)
-    df["produto"] = df["produto"].astype(str)
-    df["tipo"] = df["tipo"].astype(str)
+  # limpeza final
+df["produto_cod"] = df["produto_cod"].astype(str)
+df["produto"] = df["produto"].astype(str)
+df["tipo"] = df["tipo"].astype(str)
 
-    # remove linhas completamente vazias
-    df = df[~(df["orcado"].isna() & df["realizado"].isna())].copy()
-    df.sort_values(["data", "produto_cod"], inplace=True)
+# remove linhas completamente vazias
+df = df[~(df["orcado"].isna() & df["realizado"].isna())].copy()
+df.sort_values(["data", "produto_cod"], inplace=True)
+
 
     return df
 
