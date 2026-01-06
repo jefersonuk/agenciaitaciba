@@ -141,20 +141,23 @@ def make_plotly_template() -> go.layout.Template:
         plot_bgcolor=BRAND["card"],
         font=dict(family="Inter, system-ui, sans-serif", color=BRAND["ink"], size=13),
 
-        # eixos (dark)
         xaxis=dict(
             gridcolor=BRAND["grid"],
             zeroline=False,
             showline=False,
+            ticks="outside",
+            tickcolor="rgba(0,0,0,0)",
             tickfont=dict(color=BRAND["muted"]),
-            titlefont=dict(color=BRAND["muted"]),
+            title=dict(text="", font=dict(color=BRAND["muted"])),
         ),
         yaxis=dict(
             gridcolor=BRAND["grid"],
             zeroline=False,
             showline=False,
+            ticks="outside",
+            tickcolor="rgba(0,0,0,0)",
             tickfont=dict(color=BRAND["muted"]),
-            titlefont=dict(color=BRAND["muted"]),
+            title=dict(text="", font=dict(color=BRAND["muted"])),
         ),
 
         legend=dict(
@@ -165,10 +168,10 @@ def make_plotly_template() -> go.layout.Template:
             x=0,
             font=dict(color=BRAND["muted"]),
         ),
-
         margin=dict(l=14, r=14, t=48, b=14),
     )
     return t
+
 
 
 def fmt_br(x: float) -> str:
