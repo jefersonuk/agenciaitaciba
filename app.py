@@ -51,7 +51,7 @@ st.markdown(
     <div class="kpi-grid">
       <div class="kpi-card">
         <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
-        <p class="kpi-value">{fmt_br(saldo_real_last)}</p>
+       
         {badge_html(saldo_farol_txt, saldo_farol_color)}
       </div>
 
