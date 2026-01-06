@@ -382,37 +382,7 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
         # remove Total se estiver presente no header (Total não está no PT_MONTH)
         data_rows_2026 = raw.iloc[1:64].copy()
 
-           recs2 = []
-    for _, r in data_rows_2026.iterrows():
-        code = str(r[code_col_2026]).strip()
-        if code.lower() == "nan" or code == "" or code == "None":
-            continue
 
-        desc = str(r[desc_col_2026]).strip()
-        desc = re.sub(r"\s+", " ", desc).strip()
-
-        for mon, c in month_cols_2026:
-            orc = parse_ptbr_number(r[c])
-            dt_ = datetime(2026, PT_MONTH[mon], 1)
-            recs2.append(
-                {
-                    "data": pd.to_datetime(dt_),
-                    "ano": 2026,
-                    "mes": PT_MONTH[mon],
-                    "produto_cod": code,
-                    "produto": desc,
-                    "tipo": type_from_code(code),
-                    "orcado": orc,
-                    "realizado": np.nan,  # não existe realizado em 2026 no relatório
-                }
-            )
-
-    df_2026 = pd.DataFrame(recs2)
-
-    else:
-        df_2026 = pd.DataFrame(columns=df_2025.columns)
-
-    df = pd.concat([df_2025, df_2026], ignore_index=True)
 
     # limpeza final
     df["produto_cod"] = df["produto_cod"].astype(str)
@@ -424,6 +394,37 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
     df.sort_values(["data", "produto_cod"], inplace=True)
 
     return df
+    if len(data_rows_2026) > 0:
+        recs2 = []
+        for _, r in data_rows_2026.iterrows():
+            code = str(r[code_col_2026]).strip()
+            if code.lower() == "nan" or code == "" or code == "None":
+                continue
+
+            desc = str(r[desc_col_2026]).strip()
+            desc = re.sub(r"\s+", " ", desc).strip()
+
+            for mon, c in month_cols_2026:
+                orc = parse_ptbr_number(r[c])
+                dt_ = datetime(2026, PT_MONTH[mon], 1)
+                recs2.append(
+                    {
+                        "data": pd.to_datetime(dt_),
+                        "ano": 2026,
+                        "mes": PT_MONTH[mon],
+                        "produto_cod": code,
+                        "produto": desc,
+                        "tipo": type_from_code(code),
+                        "orcado": orc,
+                        "realizado": np.nan,  # não existe realizado em 2026 no relatório
+                    }
+                )
+
+        df_2026 = pd.DataFrame(recs2)
+    else:
+        df_2026 = pd.DataFrame(columns=df_2025.columns)
+
+    df = pd.concat([df_2025, df_2026], ignore_index=True)
 
 
 
