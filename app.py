@@ -290,7 +290,8 @@ def apply_dark_plotly(fig: go.Figure) -> go.Figure:
         tickfont=dict(color=BRAND["muted"]),
         titlefont=dict(color=BRAND["muted"]),
     )
-    return apply_dark_plotly(fig)
+    return fig   # <- TEM que ser isso (não pode chamar a função de novo)
+
 
 
 
