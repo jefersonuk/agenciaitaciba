@@ -424,13 +424,14 @@ def series_for(tipo: str) -> pd.DataFrame:
     x = dff[dff["tipo"] == tipo].copy()
     if x.empty:
         return x
+
     g = x.groupby("data", as_index=False).agg(
         orcado=("orcado", "sum"),
-        realizado=("realizado", "sum"),
+        # se todos forem NaN (ex: 2026), fica NaN e a linha para ali
+        realizado=("realizado", lambda s: s.sum(min_count=1)),
     )
-    long = g.melt(id_vars=["data"], value_vars=["orcado", "realizado"], var_name="cenario", value_name="valor")
-    long["cenario"] = long["cenario"].map({"orcado": "Orçado", "realizado": "Realizado"})
-    return long.sort_values("data")
+    return g.sort_values("data")
+
 
 col1, col2 = st.columns(2)
 
