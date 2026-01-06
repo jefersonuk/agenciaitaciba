@@ -674,8 +674,7 @@ st.markdown(
         <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
         <p class="kpi-value">{fmt_br(saldo_real_last)}</p>
         {badge_html(saldo_farol_txt, saldo_farol_color)}
-        <div class="kpi-sub">Base: <b>{saldo_last_real_dt.strftime("%b/%Y") if saldo_last_real_dt is not None else "—"}</b></div>
-      </div>
+        
 
       <div class="kpi-card">
         <div class="kpi-label">Saldo • Gap vs Orçado (mesmo mês)</div>
@@ -697,6 +696,9 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+base_txt = saldo_last_real_dt.strftime("%b/%Y") if saldo_last_real_dt is not None else "—"
+st.caption(f"Base do Saldo (último mês com dado): {base_txt}")
 
 # ==========================================================
 # Gráfico 1: Saldo
