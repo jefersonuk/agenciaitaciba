@@ -140,13 +140,36 @@ def make_plotly_template() -> go.layout.Template:
         paper_bgcolor=BRAND["bg"],
         plot_bgcolor=BRAND["card"],
         font=dict(family="Inter, system-ui, sans-serif", color=BRAND["ink"], size=13),
-        colorway=DISCRETE,
-        margin=dict(l=10, r=10, t=50, b=10),
-        xaxis=dict(gridcolor=BRAND["grid"], zeroline=False, showline=False),
-        yaxis=dict(gridcolor=BRAND["grid"], zeroline=False, showline=False),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+
+        # eixos (dark)
+        xaxis=dict(
+            gridcolor=BRAND["grid"],
+            zeroline=False,
+            showline=False,
+            tickfont=dict(color=BRAND["muted"]),
+            titlefont=dict(color=BRAND["muted"]),
+        ),
+        yaxis=dict(
+            gridcolor=BRAND["grid"],
+            zeroline=False,
+            showline=False,
+            tickfont=dict(color=BRAND["muted"]),
+            titlefont=dict(color=BRAND["muted"]),
+        ),
+
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+            font=dict(color=BRAND["muted"]),
+        ),
+
+        margin=dict(l=14, r=14, t=48, b=14),
     )
     return t
+
 
 def fmt_br(x: float) -> str:
     if x is None or (isinstance(x, float) and np.isnan(x)):
