@@ -652,71 +652,66 @@ prod_label = selected_products_label(products, selected_set)
 # ==========================================================
 # KPIs
 # ==========================================================
-saldo_last_real_dt = last_real_date_with_data(dff, "Saldo", "realizado", eps=0.0001)
-saldo_real_last = sum_at_date(dff, "Saldo", "realizado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
-saldo_orc_same = sum_at_date(dff, "Saldo", "orcado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
-saldo_gap = (saldo_real_last - saldo_orc_same) if saldo_last_real_dt is not None else np.nan
-
-r = dff[dff["tipo"] == "Rendas"]
-rendas_orc = float(r["orcado"].sum(skipna=True))
-rendas_real = float(r["realizado"].sum(min_count=1))
-
-saldo_farol_txt, saldo_farol_color = kpi_status(saldo_real_last, saldo_orc_same)
-rendas_farol_txt, rendas_farol_color = kpi_status(rendas_real, rendas_orc)
-
-base_txt = saldo_last_real_dt.strftime("%b/%Y") if saldo_last_real_dt is not None else "—"
-
 st.markdown('<p class="section-title">KPIs</p>', unsafe_allow_html=True)
 
 c1, c2, c3, c4 = st.columns(4, gap="small")
 
-with c1:
-    st.markdown(
-        f"""
-        <div class="kpi-card-native">
-          <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
-          <p class="kpi-value">{fmt_br(saldo_real_last)}</p>
-          {badge_html(saldo_farol_txt, saldo_farol_color)}
-          
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def render_kpi(col, title, value, badge_text=None, badge_color=None, sub=None):
+    with col:
+        st.markdown('<div class="kpi-card-native">', unsafe_allow_html=True)
+        st.markdown(f'<div class="kpi-label">{title}</div>', unsafe_allow_html=True)
+        st.markdown(f'<p class="kpi-value">{value}</p>', unsafe_allow_html=True)
 
-with c2:
-    st.markdown(
-        f"""
-        <div class="kpi-card-native">
-          <div class="kpi-label">Saldo • Gap vs Orçado (mesmo mês)</div>
-          <p class="kpi-value">{fmt_br(saldo_gap)}</p>
-          <div class="kpi-sub">Comparação no mês-base do realizado.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        if badge_text:
+            st.markdown(
+                f"""
+                <span style="
+                  display:inline-flex; align-items:center; gap:6px;
+                  padding:5px 10px; border-radius:999px;
+                  border:1px solid {BRAND['border']};
+                  background: rgba(255,255,255,0.06);
+                  color:{badge_color}; font-weight:800; font-size:12px;">
+                  ● {badge_text}
+                </span>
+                """,
+                unsafe_allow_html=True,
+            )
 
-with c3:
-    st.markdown(
-        f"""
-        <div class="kpi-card-native">
-          <div class="kpi-label">Rendas • Orçado (acumulado no recorte)</div>
-          <p class="kpi-value">{fmt_br(rendas_orc)}</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        if sub:
+            st.markdown(f'<div class="kpi-sub">{sub}</div>', unsafe_allow_html=True)
 
-with c4:
-    st.markdown(
-        f"""
-        <div class="kpi-card-native">
-          <div class="kpi-label">Rendas • Realizado (acumulado no recorte)</div>
-          <p class="kpi-value">{fmt_br(rendas_real)}</p>
-          {badge_html(rendas_farol_txt, rendas_farol_color)}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+render_kpi(
+    c1,
+    "Saldo • Realizado (último mês com dado)",
+    fmt_br(saldo_real_last),
+    saldo_farol_txt,
+    saldo_farol_color,
+    sub=f"Base: <b>{base_txt}</b>",
+)
+
+render_kpi(
+    c2,
+    "Saldo • Gap vs Orçado (mesmo mês)",
+    fmt_br(saldo_gap),
+    sub="Comparação no mês-base do realizado.",
+)
+
+render_kpi(
+    c3,
+    "Rendas • Orçado (acumulado no recorte)",
+    fmt_br(rendas_orc),
+)
+
+render_kpi(
+    c4,
+    "Rendas • Realizado (acumulado no recorte)",
+    fmt_br(rendas_real),
+    rendas_farol_txt,
+    rendas_farol_color,
+)
+
 st.caption(f"Base do Saldo (último mês com dado): {base_txt}")
 
 # ==========================================================
