@@ -450,28 +450,31 @@ def series_for(tipo: str) -> pd.DataFrame:
 
     g = x.groupby("data", as_index=False).agg(
         orcado=("orcado", "sum"),
-        # se todos forem NaN (ex: 2026), fica NaN e a linha para ali
-        realizado=("realizado", lambda s: s.sum(min_count=1)),
+        realizado=("realizado", lambda s: s.sum(min_count=1)),  # <- ESSENCIAL
     )
     return g.sort_values("data")
 
 
-def bar_line_figure(df_series: pd.DataFrame, title: str) -> go.Figure:
+
+def bar_line_figure(df_series: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
 
-    # Orçado = barras
+    # Orçado = barras com acabamento
     fig.add_trace(
         go.Bar(
             x=df_series["data"],
             y=df_series["orcado"],
             name="Orçado",
-            marker_color=BRAND["blue"],
-            opacity=0.65,
+            marker=dict(
+                color=BRAND["blue"],
+                line=dict(width=0),
+            ),
+            opacity=0.75,
             hovertemplate="<b>%{x|%b/%Y}</b><br>Orçado: %{y:,.2f}<extra></extra>",
         )
     )
 
-    # Realizado = linha (para quando não há dados, porque vira NaN)
+    # Realizado = linha (não conecta gaps; para quando vira NaN)
     fig.add_trace(
         go.Scatter(
             x=df_series["data"],
@@ -479,36 +482,51 @@ def bar_line_figure(df_series: pd.DataFrame, title: str) -> go.Figure:
             name="Realizado",
             mode="lines+markers",
             line=dict(color=BRAND["green"], width=3),
-            marker=dict(size=6),
+            marker=dict(size=7),
             connectgaps=False,
             hovertemplate="<b>%{x|%b/%Y}</b><br>Realizado: %{y:,.2f}<extra></extra>",
         )
     )
 
     fig.update_layout(
-        height=460,
+        # CRÍTICO: não use title=None (gera "undefined")
+        title_text="",
+        height=520,
         barmode="overlay",
-        title=None,
+        bargap=0.25,
         legend_title_text="",
         hovermode="x unified",
+        hoverlabel=dict(
+            bgcolor="rgba(17,26,46,0.92)",
+            bordercolor="rgba(234,240,255,0.15)",
+            font=dict(color=BRAND["ink"]),
+        ),
     )
+
+    # Eixos com cara de produto
+    fig.update_xaxes(
+        title_text="",
+        tickformat="%b\n%Y",
+        showgrid=False,
+        ticks="outside",
+    )
+    fig.update_yaxes(
+        title_text="",
+        gridcolor=BRAND["grid"],
+        separatethousands=True,
+    )
+
     return fig
 
-# --- Saldo (em cima)
+
 st.markdown('<p class="section-title">Evolução • Saldo da Carteira</p>', unsafe_allow_html=True)
 s_saldo = series_for("Saldo")
-if s_saldo.empty:
-    st.info("Sem dados para Saldo nesse recorte.")
-else:
-    st.plotly_chart(bar_line_figure(s_saldo, "Saldo"), use_container_width=True)
+st.plotly_chart(bar_line_figure(s_saldo), use_container_width=True)
 
-# --- Rendas (embaixo)
 st.markdown('<p class="section-title">Evolução • Rendas da Carteira</p>', unsafe_allow_html=True)
 s_rendas = series_for("Rendas")
-if s_rendas.empty:
-    st.info("Sem dados para Rendas nesse recorte.")
-else:
-    st.plotly_chart(bar_line_figure(s_rendas, "Rendas"), use_container_width=True)
+st.plotly_chart(bar_line_figure(s_rendas), use_container_width=True)
+
 
 
 with col1:
