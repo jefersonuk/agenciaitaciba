@@ -156,6 +156,13 @@ def inject_css() -> None:
         """,
         unsafe_allow_html=True,
     )
+.kpi-card-native{
+  background: var(--b-card);
+  border: 1px solid var(--b-border);
+  border-radius: 22px;
+  padding: 16px 16px;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.30);
+}
 
 
 # ==========================================================
