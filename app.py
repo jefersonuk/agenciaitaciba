@@ -436,20 +436,27 @@ def build_timeseries(df_view: pd.DataFrame, tipo: str) -> pd.DataFrame:
     if x.empty:
         return pd.DataFrame(columns=["data", "orcado", "realizado"])
 
+    # garante tipos
+    x["data"] = pd.to_datetime(x["data"], errors="coerce")
+
+    # agrega por mês
     ts = (
         x.groupby("data", as_index=False)[["orcado", "realizado"]]
         .sum(min_count=1)
         .sort_values("data")
     )
 
-    # quebra linha do realizado após último mês com dado concreto (não desce para zero)
-    last_dt = last_nonzero_date(ts["realizado"], ts["data"])
-    if last_dt is not None:
-        ts.loc[ts["data"] > last_dt, "realizado"] = np.nan
-        # se houver mês "zerado" depois (ex: Dez/2025 = 0), também vira NaN
-        ts.loc[(ts["data"] > last_dt) & (ts["realizado"] == 0), "realizado"] = np.nan
+    # acha o último mês com realizado "concreto" (não nulo e != 0)
+    mask_real = ts["realizado"].notna() & (ts["realizado"] != 0)
+    last_real_dt = ts.loc[mask_real, "data"].max()
+
+    # IMPORTANTÍSSIMO: não corta a série (pra não perder 2026),
+    # só "remove" realizado após o último mês com dado
+    if pd.notna(last_real_dt):
+        ts.loc[ts["data"] > last_real_dt, "realizado"] = np.nan
 
     return ts
+
 
 
 def fig_orcado_bar_real_line(ts: pd.DataFrame, title: str, prod_label: str) -> go.Figure:
