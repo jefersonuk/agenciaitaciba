@@ -479,68 +479,93 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
         return best_i if (best_i is not None and best_score >= 3) else None
 
     def parse_part(dfmat: pd.DataFrame, year: int, has_realizado: bool) -> pd.DataFrame:
-        if dfmat.empty:
-            return pd.DataFrame(columns=cols_final)
+    cols_final = ["data", "ano", "mes", "produto_cod", "produto", "tipo", "orcado", "realizado"]
 
-        h = find_header_row_with_months(dfmat)
-        if h is None:
-            return pd.DataFrame(columns=cols_final)
+    if dfmat.empty:
+        return pd.DataFrame(columns=cols_final)
 
-        header = dfmat.iloc[h].tolist()
+    h = find_header_row_with_months(dfmat)
+    if h is None:
+        return pd.DataFrame(columns=cols_final)
 
-        # mapeia meses -> colunas
-        month_cols = []
-        for j, cell in enumerate(header):
-            mon = normalize_month_label(cell)
-            if mon is None:
-                continue
+    header_months = dfmat.iloc[h].tolist()
+    subheader = dfmat.iloc[h + 1].tolist() if (h + 1) < len(dfmat) else [""] * dfmat.shape[1]
+
+    def norm_sub(s: object) -> str:
+        s = "" if s is None else str(s)
+        s = re.sub(r"\s+", " ", s).strip().lower()
+        return s
+
+    # monta mapa mês -> coluna do orçado/realizado usando o subheader
+    month_map = []
+    for j, cell in enumerate(header_months):
+        mon = normalize_month_label(cell)
+        if mon is None:
+            continue
+
+        # procura as colunas do mês olhando uma "janela" à direita
+        # (alguns relatórios têm 2, 3 ou 4 colunas por mês)
+        orc_col = None
+        rea_col = None
+        for k in range(j, min(j + 6, dfmat.shape[1])):  # janela segura
+            tag = norm_sub(subheader[k])
+            if orc_col is None and ("orc" in tag or "orç" in tag):
+                orc_col = k
+            if has_realizado and rea_col is None and ("real" in tag):
+                rea_col = k
+
+        # fallback se não achou pelo subheader
+        if orc_col is None and (j + 1) < dfmat.shape[1]:
             orc_col = j + 1
-            rea_col = j + 2 if has_realizado else None
-            if orc_col < dfmat.shape[1]:
-                month_cols.append((mon, orc_col, rea_col))
+        if has_realizado and rea_col is None and (j + 2) < dfmat.shape[1]:
+            rea_col = j + 2
 
-        if not month_cols:
-            return pd.DataFrame(columns=cols_final)
+        month_map.append((mon, orc_col, rea_col))
 
-        data_rows = dfmat.iloc[h + 1 :].copy()
+    if not month_map:
+        return pd.DataFrame(columns=cols_final)
 
-        recs = []
-        for _, r in data_rows.iterrows():
-            code = str(r.iloc[0]).strip()
-            if code.lower() in ("nan", "none", ""):
+    # dados começam após (h+1) porque h é meses e (h+1) é subheader
+    data_rows = dfmat.iloc[h + 2 :].copy()
+
+    recs = []
+    for _, r in data_rows.iterrows():
+        code = str(r.iloc[0]).strip()
+        if code.lower() in ("nan", "none", ""):
+            continue
+
+        desc = str(r.iloc[1]).strip()
+        desc = re.sub(r"\s+", " ", desc).strip()
+
+        for mon, orc_col, rea_col in month_map:
+            orc = parse_ptbr_number(r.iloc[orc_col]) if orc_col is not None and orc_col < len(r) else np.nan
+            rea = (
+                parse_ptbr_number(r.iloc[rea_col])
+                if has_realizado and rea_col is not None and rea_col < len(r)
+                else np.nan
+            )
+
+            # evita gerar linhas “lixo” (ex: colunas auxiliares do relatório)
+            if (pd.isna(orc) or orc == 0) and (pd.isna(rea) or rea == 0):
                 continue
 
-            desc = str(r.iloc[1]).strip()
-            desc = re.sub(r"\s+", " ", desc).strip()
+            dt_ = datetime(year, PT_MONTH[mon], 1)
+            recs.append(
+                {
+                    "data": pd.to_datetime(dt_),
+                    "ano": year,
+                    "mes": PT_MONTH[mon],
+                    "produto_cod": code,
+                    "produto": desc,
+                    "tipo": type_from_code(code),
+                    "orcado": orc,
+                    "realizado": rea,
+                }
+            )
 
-            for mon, orc_col, rea_col in month_cols:
-                orc = parse_ptbr_number(r.iloc[orc_col]) if orc_col is not None else np.nan
-                rea = (
-                    parse_ptbr_number(r.iloc[rea_col])
-                    if (has_realizado and rea_col is not None and rea_col < dfmat.shape[1])
-                    else np.nan
-                )
+    out = pd.DataFrame(recs)
+    return out if not out.empty else pd.DataFrame(columns=cols_final)
 
-                # não cria linha toda vazia
-                if (orc is None or (isinstance(orc, float) and np.isnan(orc))) and (rea is None or (isinstance(rea, float) and np.isnan(rea))):
-                    continue
-
-                dt_ = datetime(year, PT_MONTH[mon], 1)
-                recs.append(
-                    {
-                        "data": pd.to_datetime(dt_),
-                        "ano": year,
-                        "mes": PT_MONTH[mon],
-                        "produto_cod": code,
-                        "produto": desc,
-                        "tipo": type_from_code(code),
-                        "orcado": orc,
-                        "realizado": rea,
-                    }
-                )
-
-        out = pd.DataFrame(recs)
-        return out if not out.empty else pd.DataFrame(columns=cols_final)
 
     # ---------------- split 2025 / 2026 ----------------
     i25 = find_year_start(raw, 2025)
