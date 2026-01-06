@@ -569,6 +569,7 @@ def build_timeseries(df_view: pd.DataFrame, tipo: str) -> pd.DataFrame:
 
 
 
+
 def fig_orcado_bar_real_line(ts: pd.DataFrame, title: str, prod_label: str) -> go.Figure:
     fig = go.Figure()
 
