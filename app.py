@@ -10,15 +10,16 @@ import plotly.graph_objects as go
 # BANESTES DESIGN TOKENS (identidade visual)
 # ==========================================================
 BRAND = {
-    "blue": "#1E0AE8",     # Azul (Pantone 2728 C na referência enviada)
-    "green": "#00AB16",    # Verde (Pantone 2423 C na referência enviada)
-    "ink": "#0B1220",
-    "muted": "#64748B",
-    "bg": "#F7F9FC",
-    "card": "#FFFFFF",
-    "border": "rgba(15, 23, 42, 0.08)",
-    "grid": "rgba(15, 23, 42, 0.06)",
+    "blue": "#1E0AE8",
+    "green": "#00AB16",
+    "ink": "#EAF0FF",          # texto claro
+    "muted": "#9FB0D0",        # texto secundário
+    "bg": "#0B1020",           # fundo dark (não preto)
+    "card": "#111A2E",         # cards/plots
+    "border": "rgba(234, 240, 255, 0.10)",
+    "grid": "rgba(234, 240, 255, 0.08)",
 }
+
 
 DISCRETE = [BRAND["blue"], BRAND["green"], "#6D5BFF", "#2DD4BF", "#A78BFA", "#60A5FA"]
 CONT_SCALE = [[0.0, BRAND["blue"]], [1.0, BRAND["green"]]]
