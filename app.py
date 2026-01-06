@@ -353,6 +353,38 @@ section[data-testid="stSidebar"] [role="radiogroup"] label {{
 """,
     unsafe_allow_html=True,
 )
+st.sidebar.markdown("## Dados")
+
+st.sidebar.markdown('<div class="sb-card">', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sb-card-title">Arquivo</div>', unsafe_allow_html=True)
+
+uploaded = st.sidebar.file_uploader("Anexe o relatório (CSV exportado)", type=["csv"])
+st.sidebar.markdown('<div class="sb-helper">Dica: exporte o CSV do relatório matricial.</div>', unsafe_allow_html=True)
+
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
+
+st.sidebar.markdown("## Filtros")
+
+st.sidebar.markdown('<div class="sb-card">', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sb-card-title">Período</div>', unsafe_allow_html=True)
+
+periodo = st.sidebar.radio("Período", ["Total", "Ano", "Mês"], horizontal=True)
+
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
+
+st.sidebar.markdown('<div class="sb-card">', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sb-card-title">Ano e mês</div>', unsafe_allow_html=True)
+
+# seu selectbox de ano / mês aqui…
+
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
+
+st.sidebar.markdown('<div class="sb-card">', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sb-card-title">Produtos</div>', unsafe_allow_html=True)
+
+prod_sel = st.sidebar.multiselect("Produto (multi)", prod_labels, default=default_sel)
+
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================================================
 # Helpers
