@@ -480,7 +480,7 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
 
     def parse_part(dfmat: pd.DataFrame, year: int, has_realizado: bool) -> pd.DataFrame:
 
-
+  return df
 
     # ---------------- split 2025 / 2026 ----------------
     i25 = find_year_start(raw, 2025)
