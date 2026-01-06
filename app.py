@@ -475,21 +475,41 @@ def top5_representatividade_rendas(df_time: pd.DataFrame) -> pd.DataFrame:
     top5["metric"] = metric
     return top5
 
+def human_millions(v: float) -> str:
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return "—"
+    abs_v = abs(v)
+    if abs_v >= 1_000_000:
+        return f"{v/1_000_000:.1f}M".replace(".", ",")
+    if abs_v >= 1_000:
+        return f"{v/1_000:.0f}k".replace(".", ",")
+    return f"{v:.0f}".replace(".", ",")
+
 def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
     metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
 
-    rep_plot = rep.sort_values("valor", ascending=True).copy()
-    perc = (rep_plot["share"] * 100).round(1).astype(str) + "%"
+    # Ordena: maiores primeiro; "Outros" sempre por último
+    rep2 = rep.copy()
+    rep2["is_outros"] = (rep2["produto"] == "Outros").astype(int)
+    rep2 = rep2.sort_values(["is_outros", "valor"], ascending=[True, False]).drop(columns=["is_outros"])
 
+    # Para barras horizontais com maior no topo, precisa inverter pra plotting
+    rep_plot = rep2.iloc[::-1].copy()
+
+    # Labels na barra: % + valor curto
+    rep_plot["pct"] = (rep_plot["share"] * 100).round(1)
+    rep_plot["label"] = rep_plot.apply(lambda r: f"{r['pct']:.1f}%  •  {human_millions(float(r['valor']))}", axis=1)
+
+    # Paleta: gradiente azul→violeta; Outros neutro
     grad = ["#2B59FF", "#3550FF", "#3D47FF", "#453DFF", "#4D33FF", "#5B2BD6"]
     colors = []
-    idx = 0
+    k = 0
     for p in rep_plot["produto"].tolist():
         if p == "Outros":
-            colors.append("rgba(242,246,255,0.22)")
+            colors.append("rgba(242,246,255,0.18)")
         else:
-            colors.append(grad[min(idx, len(grad) - 1)])
-            idx += 1
+            colors.append(grad[min(k, len(grad) - 1)])
+            k += 1
 
     fig = go.Figure()
     fig.add_trace(
@@ -497,15 +517,44 @@ def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
             y=rep_plot["produto"],
             x=rep_plot["valor"],
             orientation="h",
-            marker=dict(color=colors, line=dict(width=0)),
-            text=perc,
+            marker=dict(
+                color=colors,
+                line=dict(width=0),
+            ),
+            text=rep_plot["label"],
             textposition="outside",
             textfont=dict(color=BRAND["muted"], size=12),
             hovertemplate="<b>%{y}</b><br>"
                           f"Rendas ({metric_lbl}): " + "%{x:,.2f}<br>"
-                          "Share: %{text}<extra></extra>",
+                          "Share: %{customdata:.1f}%<extra></extra>",
+            customdata=rep_plot["pct"],
         )
     )
+
+    fig.update_layout(
+        height=420,
+        paper_bgcolor=BRAND["bg"],
+        plot_bgcolor=BRAND["card"],
+        margin=dict(l=14, r=18, t=10, b=14),
+        showlegend=False,
+        xaxis=dict(
+            title="",
+            gridcolor="rgba(242,246,255,0.04)",
+            zeroline=False,
+            tickfont=dict(color=BRAND["muted"]),
+        ),
+        yaxis=dict(
+            title="",
+            tickfont=dict(color=BRAND["ink"]),
+        ),
+    )
+
+    # espaço para os labels fora da barra
+    xmax = float(rep_plot["valor"].max()) if len(rep_plot) else 0
+    fig.update_xaxes(range=[0, xmax * 1.18])
+
+    return fig
+
 
     fig.update_layout(
         height=380,
@@ -703,10 +752,11 @@ rep = top5_representatividade_rendas(df_time)
 if rep.empty:
     st.info("Sem dados suficientes de Rendas para calcular representatividade neste recorte.")
 else:
-    metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
-    st.markdown(
-        f'<div class="pill"><span style="opacity:.8">Base:</span> <b>Rendas ({metric_lbl})</b></div>',
-        unsafe_allow_html=True,
-    )
+   metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
+st.markdown(
+    f'<div class="pill"><span style="opacity:.8">Base:</span> <b>Rendas ({metric_lbl})</b> <span style="opacity:.6">• Top 5 + Outros</span></div>',
+    unsafe_allow_html=True
+)
+
     st.plotly_chart(representatividade_figure(rep), use_container_width=True)
     st.caption("Top 5 + Outros. TOTAL 18202 é excluído para evitar distorção.")
