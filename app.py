@@ -44,108 +44,39 @@ st.set_page_config(
 # UI / CSS (premium, menos “quadrado”)
 # ==========================================================
 def inject_css() -> None:
-    st.markdown(
-        f"""
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap');
+   st.markdown('<p class="section-title">KPIs</p>', unsafe_allow_html=True)
 
-          :root {{
-            --b-blue: {BRAND["blue"]};
-            --b-green: {BRAND["green"]};
-            --b-ink: {BRAND["ink"]};
-            --b-muted: {BRAND["muted"]};
-            --b-bg: {BRAND["bg"]};
-            --b-card: {BRAND["card"]};
-            --b-border: {BRAND["border"]};
-          }}
+st.markdown(
+    f"""
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
+        <p class="kpi-value">{fmt_br(saldo_real_last)}</p>
+        {badge_html(saldo_farol_txt, saldo_farol_color)}
+      </div>
 
-          html, body, [class*="css"] {{
-            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-            color: var(--b-ink);
-          }}
+      <div class="kpi-card">
+        <div class="kpi-label">Saldo • Gap vs Orçado (mesmo mês)</div>
+        <p class="kpi-value">{fmt_br(saldo_gap)}</p>
+        <div style="margin-top:6px; color: rgba(242,246,255,0.70); font-size:12px;">
+          Base: <b>{saldo_last_real_dt.strftime("%b/%Y") if saldo_last_real_dt is not None else "—"}</b>
+        </div>
+      </div>
 
-          #MainMenu {{ visibility: hidden; }}
-          footer {{ visibility: hidden; }}
-          header {{ visibility: hidden; }}
+      <div class="kpi-card">
+        <div class="kpi-label">Rendas • Orçado (acumulado no recorte)</div>
+        <p class="kpi-value">{fmt_br(rendas_orc)}</p>
+      </div>
 
-          .stApp {{ background: var(--b-bg); }}
-
-          section[data-testid="stSidebar"] {{
-            background: var(--b-card);
-            border-right: 1px solid var(--b-border);
-          }}
-
-          .topbar {{
-            display:flex; align-items:center; justify-content:space-between; gap:16px;
-            padding:16px 18px; background: var(--b-card);
-            border: 1px solid var(--b-border); border-radius: 22px;
-            box-shadow: 0 18px 50px rgba(0,0,0,0.35);
-            margin-bottom: 14px;
-          }}
-          .title {{
-            font-family: Poppins, Inter, sans-serif;
-            font-weight: 800; letter-spacing: -0.02em;
-            font-size: 20px; margin:0; line-height:1.1;
-            color: rgba(242,246,255,0.98);
-          }}
-          .subtitle {{
-            margin:4px 0 0 0; color: rgba(242,246,255,0.70); font-size: 13px;
-          }}
-
-          .kpi-grid {{
-            display:grid;
-            grid-template-columns: repeat(4, minmax(0,1fr));
-            gap: 12px;
-          }}
-          @media (max-width: 1100px) {{
-            .kpi-grid {{ grid-template-columns: repeat(2, minmax(0,1fr)); }}
-          }}
-          @media (max-width: 650px) {{
-            .kpi-grid {{ grid-template-columns: 1fr; }}
-          }}
-
-          .kpi-card {{
-            background: var(--b-card);
-            border: 1px solid var(--b-border);
-            border-radius: 22px;
-            padding: 16px 16px;
-            box-shadow: 0 18px 50px rgba(0,0,0,0.30);
-          }}
-          .kpi-label {{
-            color: rgba(242,246,255,0.72);
-            font-size: 12px;
-            margin-bottom: 6px;
-          }}
-          .kpi-value {{
-            font-family: Poppins, Inter, sans-serif;
-            font-weight: 800;
-            font-size: 26px;
-            letter-spacing: -0.02em;
-            margin: 0;
-            line-height: 1.05;
-            color: rgba(242,246,255,0.98);
-          }}
-
-          .section-title {{
-            font-family: Poppins, Inter, sans-serif;
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            margin: 18px 0 10px 0;
-            color: rgba(242,246,255,0.96);
-          }}
-
-          .pill {{
-            display:inline-flex; align-items:center; gap:8px;
-            padding: 6px 12px; border-radius: 999px;
-            border: 1px solid var(--b-border);
-            background: rgba(30, 10, 232, 0.10);
-            font-size: 12px;
-            color: rgba(242,246,255,0.92);
-          }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+      <div class="kpi-card">
+        <div class="kpi-label">Rendas • Realizado (acumulado no recorte)</div>
+        <p class="kpi-value">{fmt_br(rendas_real)}</p>
+        {badge_html(rendas_farol_txt, rendas_farol_color)}
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 
 # ==========================================================
@@ -216,6 +147,31 @@ def br_to_float(x) -> float:
     except Exception:
         return np.nan
     return -v if neg else v
+
+def kpi_status(real: float, plan: float, eps: float = 1e-9):
+    """
+    Retorna (label, color) para farol.
+    - verde: real >= plan
+    - vermelho: real < plan
+    - neutro: se não tiver dados
+    """
+    if real is None or plan is None or (isinstance(real, float) and np.isnan(real)) or (isinstance(plan, float) and np.isnan(plan)):
+        return ("Sem dado", "rgba(242,246,255,0.55)")
+    return ("Cumprido", BRAND["green"]) if (real + eps) >= plan else ("Não cumprido", "#FF4D6D")
+
+
+def badge_html(text: str, color: str) -> str:
+    return f"""
+    <span style="
+      display:inline-flex; align-items:center; gap:6px;
+      padding:5px 10px; border-radius:999px;
+      border:1px solid {BRAND['border']};
+      background: rgba(255,255,255,0.06);
+      color:{color}; font-weight:800; font-size:12px;">
+      ● {text}
+    </span>
+    """
+
 
 
 MONTH_MAP = {"Jan": 1, "Fev": 2, "Mar": 3, "Abr": 4, "Mai": 5, "Jun": 6,
@@ -583,4 +539,7 @@ if s_rendas.empty:
     st.info("Sem dados para Rendas nesse recorte.")
 else:
     st.plotly_chart(bar_line_figure(s_rendas), use_container_width=True)
+
+saldo_farol_txt, saldo_farol_color = kpi_status(saldo_real_last, saldo_orc_same)
+rendas_farol_txt, rendas_farol_color = kpi_status(rendas_real, rendas_orc)
 
