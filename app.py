@@ -1,17 +1,19 @@
-
 # app.py
 # Banestes • Itacibá — Carteira de Crédito
-# Dashboard Streamlit + Plotly (dark premium) com parsing fiel ao CSV "wide"
-# Ajustes incluídos:
-# - Tema dark elegante + alto contraste
-# - Layout: 2 gráficos empilhados (Saldo em cima, Rendas embaixo)
-# - Orçado = barras / Realizado = linha (sem “cair pra zero” quando não há dados: NaN para e a linha para)
-# - Hover limpo (sem %{legendgroup})
-# - “Legenda contextual” com produtos selecionados em chip
-# - KPIs: Saldo é snapshot (último mês com dado) + gap vs orçado (mesmo mês); Rendas é acumulado
-# - Removidas infos de debug (amostra/expander) e download desnecessário
+# Streamlit + Plotly (dark premium)
+#
+# Inclui:
+# - Tema dark elegante e legível (alto contraste)
+# - 2 gráficos empilhados: Saldo e Rendas (Orçado=barras | Realizado=linha)
+# - Realizado não “cai pra zero” quando não há dado (NaN para e a linha para)
+# - Filtros: Período (Total/Ano/Mês) + Produtos (multi) com anti-dupla contagem
+# - KPIs executivos:
+#   * Saldo: snapshot do último mês com realizado “concreto” (realizado != 0) + gap vs orçado no mesmo mês
+#   * Rendas: acumulado no recorte (orçado e realizado)
+# - Faróis (verde/vermelho) para cumprimento (Saldo e Rendas)
+# - Representatividade (Top 5) por produto considerando apenas Rendas (sem pizza)
+#   (usa subprodutos 18202* e exclui o TOTAL 18202)
 
-import os
 import re
 import streamlit as st
 import pandas as pd
@@ -26,6 +28,7 @@ import plotly.express as px
 BRAND = {
     "blue": "#1E0AE8",
     "green": "#00AB16",
+    "red": "#FF4D6D",
     "ink": "#F2F6FF",
     "muted": "#B8C6E6",
     "bg": "#0A1020",
@@ -40,47 +43,123 @@ st.set_page_config(
     layout="wide",
 )
 
+
 # ==========================================================
-# UI / CSS (premium, menos “quadrado”)
+# UI / CSS (premium)
 # ==========================================================
 def inject_css() -> None:
-  st.markdown('<p class="section-title">KPIs</p>', unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap');
 
-st.markdown(
-    f"""
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
-       
-        {badge_html(saldo_farol_txt, saldo_farol_color)}
-      </div>
+          :root {{
+            --b-blue: {BRAND["blue"]};
+            --b-green: {BRAND["green"]};
+            --b-red: {BRAND["red"]};
+            --b-ink: {BRAND["ink"]};
+            --b-muted: {BRAND["muted"]};
+            --b-bg: {BRAND["bg"]};
+            --b-card: {BRAND["card"]};
+            --b-border: {BRAND["border"]};
+          }}
 
-      <div class="kpi-card">
-        <div class="kpi-label">Saldo • Gap vs Orçado (mesmo mês)</div>
-        <p class="kpi-value">{fmt_br(saldo_gap)}</p>
-        <div style="margin-top:6px; color: rgba(242,246,255,0.70); font-size:12px;">
-          Base: <b>{saldo_last_real_dt.strftime("%b/%Y") if saldo_last_real_dt is not None else "—"}</b>
-        </div>
-      </div>
+          html, body, [class*="css"] {{
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+            color: var(--b-ink);
+          }}
 
-      <div class="kpi-card">
-        <div class="kpi-label">Rendas • Orçado (acumulado no recorte)</div>
-        <p class="kpi-value">{fmt_br(rendas_orc)}</p>
-      </div>
+          #MainMenu {{ visibility: hidden; }}
+          footer {{ visibility: hidden; }}
+          header {{ visibility: hidden; }}
 
-      <div class="kpi-card">
-        <div class="kpi-label">Rendas • Realizado (acumulado no recorte)</div>
-        <p class="kpi-value">{fmt_br(rendas_real)}</p>
-        {badge_html(rendas_farol_txt, rendas_farol_color)}
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+          .stApp {{ background: var(--b-bg); }}
+
+          section[data-testid="stSidebar"] {{
+            background: var(--b-card);
+            border-right: 1px solid var(--b-border);
+          }}
+
+          .topbar {{
+            display:flex; align-items:center; justify-content:space-between; gap:16px;
+            padding:16px 18px; background: var(--b-card);
+            border: 1px solid var(--b-border); border-radius: 22px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+            margin-bottom: 14px;
+          }}
+          .title {{
+            font-family: Poppins, Inter, sans-serif;
+            font-weight: 800; letter-spacing: -0.02em;
+            font-size: 20px; margin:0; line-height:1.1;
+            color: rgba(242,246,255,0.98);
+          }}
+          .subtitle {{
+            margin:4px 0 0 0; color: rgba(242,246,255,0.70); font-size: 13px;
+          }}
+
+          .kpi-grid {{
+            display:grid;
+            grid-template-columns: repeat(4, minmax(0,1fr));
+            gap: 12px;
+          }}
+          @media (max-width: 1100px) {{
+            .kpi-grid {{ grid-template-columns: repeat(2, minmax(0,1fr)); }}
+          }}
+          @media (max-width: 650px) {{
+            .kpi-grid {{ grid-template-columns: 1fr; }}
+          }}
+
+          .kpi-card {{
+            background: var(--b-card);
+            border: 1px solid var(--b-border);
+            border-radius: 22px;
+            padding: 16px 16px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.30);
+          }}
+          .kpi-label {{
+            color: rgba(242,246,255,0.72);
+            font-size: 12px;
+            margin-bottom: 6px;
+          }}
+          .kpi-value {{
+            font-family: Poppins, Inter, sans-serif;
+            font-weight: 800;
+            font-size: 26px;
+            letter-spacing: -0.02em;
+            margin: 0;
+            line-height: 1.05;
+            color: rgba(242,246,255,0.98);
+          }}
+          .kpi-sub {{
+            margin-top: 8px;
+            color: rgba(242,246,255,0.70);
+            font-size: 12px;
+          }}
+
+          .section-title {{
+            font-family: Poppins, Inter, sans-serif;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin: 18px 0 10px 0;
+            color: rgba(242,246,255,0.96);
+          }}
+
+          .pill {{
+            display:inline-flex; align-items:center; gap:8px;
+            padding: 6px 12px; border-radius: 999px;
+            border: 1px solid var(--b-border);
+            background: rgba(30, 10, 232, 0.10);
+            font-size: 12px;
+            color: rgba(242,246,255,0.92);
+          }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ==========================================================
-# Plotly template (compatível e dark)
+# Plotly template (compatível + dark)
 # ==========================================================
 def make_plotly_template() -> go.layout.Template:
     t = go.layout.Template()
@@ -120,7 +199,7 @@ def make_plotly_template() -> go.layout.Template:
 
 
 # ==========================================================
-# Helpers de formatação e parsing (BR numbers)
+# Helpers (formatação, farol, parsing BR numbers)
 # ==========================================================
 def fmt_br(x: float) -> str:
     if x is None or (isinstance(x, float) and np.isnan(x)):
@@ -148,16 +227,14 @@ def br_to_float(x) -> float:
         return np.nan
     return -v if neg else v
 
+
 def kpi_status(real: float, plan: float, eps: float = 1e-9):
-    """
-    Retorna (label, color) para farol.
-    - verde: real >= plan
-    - vermelho: real < plan
-    - neutro: se não tiver dados
-    """
-    if real is None or plan is None or (isinstance(real, float) and np.isnan(real)) or (isinstance(plan, float) and np.isnan(plan)):
+    """Farol: verde se real >= plan; vermelho se real < plan; neutro se sem dados."""
+    if real is None or plan is None:
         return ("Sem dado", "rgba(242,246,255,0.55)")
-    return ("Cumprido", BRAND["green"]) if (real + eps) >= plan else ("Não cumprido", "#FF4D6D")
+    if (isinstance(real, float) and np.isnan(real)) or (isinstance(plan, float) and np.isnan(plan)):
+        return ("Sem dado", "rgba(242,246,255,0.55)")
+    return ("Cumprido", BRAND["green"]) if (real + eps) >= plan else ("Não cumprido", BRAND["red"])
 
 
 def badge_html(text: str, color: str) -> str:
@@ -173,42 +250,46 @@ def badge_html(text: str, color: str) -> str:
     """
 
 
-
-MONTH_MAP = {"Jan": 1, "Fev": 2, "Mar": 3, "Abr": 4, "Mai": 5, "Jun": 6,
-             "Jul": 7, "Ago": 8, "Set": 9, "Out": 10, "Nov": 11, "Dez": 12}
+MONTH_MAP = {
+    "Jan": 1, "Fev": 2, "Mar": 3, "Abr": 4, "Mai": 5, "Jun": 6,
+    "Jul": 7, "Ago": 8, "Set": 9, "Out": 10, "Nov": 11, "Dez": 12
+}
 
 
 @st.cache_data(show_spinner=False)
 def parse_relatorio(uploaded_file) -> pd.DataFrame:
     """
-    Parser fiel ao relatório no formato wide:
+    Parser fiel ao relatório no formato wide (como exportado):
       - 2025: blocos [Orçado, Realizado] por mês
       - 2026: apenas Orçado por mês
-    Retorna tidy:
+    Retorna formato tidy:
       tipo, data, ano, mes, produto_cod, produto_desc, produto, orcado, realizado
     """
     raw = pd.read_csv(uploaded_file, sep=None, engine="python", encoding="latin1")
     cols = list(raw.columns)
 
-    # ----- 2025: colunas padrão do export atual -----
+    # 2025 (colunas típicas do export atual)
     code_2025 = "2025"
     desc_2025 = "Unnamed: 1"
 
     blocks_2025 = []
-    for start in range(2, min(50, len(cols)), 4):
-        mlabel = raw.iloc[0, start] if start < len(cols) else None
+    for start in range(2, min(60, len(cols)), 4):
+        try:
+            mlabel = raw.iloc[0, start]
+        except Exception:
+            continue
         if pd.isna(mlabel):
             continue
         mlabel = str(mlabel).strip()
         if mlabel in MONTH_MAP and (start + 1) < len(cols):
             blocks_2025.append((MONTH_MAP[mlabel], cols[start], cols[start + 1]))
 
-    # ----- 2026: colunas padrão do export atual -----
+    # 2026 (colunas típicas do export atual)
     code_2026 = "Unnamed: 50"
     desc_2026 = "Unnamed: 51"
 
     blocks_2026 = []
-    for idx in range(53, 65):
+    for idx in range(53, 90):
         colname = f"Unnamed: {idx}"
         if colname not in raw.columns:
             continue
@@ -221,9 +302,11 @@ def parse_relatorio(uploaded_file) -> pd.DataFrame:
 
     records = []
 
-    # 2025 rows (tipicamente começam na linha 2)
+    # 2025 data rows (tipicamente começam em i=2)
     for i in range(2, len(raw)):
-        code = raw.at[i, code_2025] if code_2025 in raw.columns else None
+        if code_2025 not in raw.columns:
+            break
+        code = raw.at[i, code_2025]
         if pd.isna(code):
             continue
         code_str = str(code).strip()
@@ -250,9 +333,11 @@ def parse_relatorio(uploaded_file) -> pd.DataFrame:
                 "realizado": br_to_float(raw.at[i, c_real]),
             })
 
-    # 2026 rows (tipicamente começam na linha 1)
+    # 2026 data rows (tipicamente começam em i=1)
     for i in range(1, len(raw)):
-        code = raw.at[i, code_2026] if code_2026 in raw.columns else None
+        if code_2026 not in raw.columns:
+            break
+        code = raw.at[i, code_2026]
         if pd.isna(code):
             continue
         code_str = str(code).strip()
@@ -280,30 +365,32 @@ def parse_relatorio(uploaded_file) -> pd.DataFrame:
             })
 
     tidy = pd.DataFrame.from_records(records)
+    if tidy.empty:
+        return tidy
+
     tidy["produto"] = tidy["produto_cod"] + " - " + tidy["produto_desc"]
     return tidy
 
 
 def safe_drop_totals(selected_codes: set[str]) -> tuple[set[str], list[str]]:
     """
-    Evita dupla contagem: se selecionar TOTAL (18201/18202) e também subprodutos,
-    removemos o TOTAL automaticamente.
+    Evita dupla contagem:
+    se selecionar TOTAL (18201/18202) e também subprodutos, removemos o TOTAL.
     """
     warnings = []
     out = set(selected_codes)
+
     for total in ["18201", "18202"]:
         has_total = total in out
         has_children = any((c != total and c.startswith(total)) for c in out)
         if has_total and has_children:
             out.remove(total)
-            warnings.append(
-                f"Removi automaticamente o TOTAL {total} para evitar dupla contagem (subprodutos também selecionados)."
-            )
+            warnings.append(f"Removi automaticamente o TOTAL {total} para evitar dupla contagem (subprodutos também selecionados).")
+
     return out, warnings
 
 
 def selected_products_label(products_df: pd.DataFrame, selected_codes: set[str], max_items: int = 2) -> str:
-    """Rótulo curto para chip de produtos selecionados."""
     if not selected_codes:
         return "Todos os produtos"
     mp = dict(zip(products_df["produto_cod"], products_df["produto"]))
@@ -313,8 +400,21 @@ def selected_products_label(products_df: pd.DataFrame, selected_codes: set[str],
     return " • ".join(names[:max_items]) + f"  +{len(names) - max_items} outros"
 
 
+def last_real_date_with_data(dff: pd.DataFrame, tipo: str, col: str, eps: float = 0.0001):
+    """
+    Última data com dado "concreto" (não nulo e != 0).
+    Isso evita puxar Dez/2025 = 0,00 quando o mês ainda não fechou.
+    """
+    x = dff[(dff["tipo"] == tipo)][["data", col]].copy()
+    x = x.dropna()
+    x = x[x[col].abs() > eps]
+    if x.empty:
+        return None
+    return pd.to_datetime(x["data"]).max()
+
+
 # ==========================================================
-# Série + gráfico (orçado barras, realizado linha)
+# Série + gráficos
 # ==========================================================
 def series_for(dff: pd.DataFrame, tipo: str) -> pd.DataFrame:
     x = dff[dff["tipo"] == tipo].copy()
@@ -322,8 +422,7 @@ def series_for(dff: pd.DataFrame, tipo: str) -> pd.DataFrame:
         return x
     g = x.groupby("data", as_index=False).agg(
         orcado=("orcado", "sum"),
-        # essencial: se tudo é NaN em uma data (ex: 2026), permanece NaN (linha para)
-        realizado=("realizado", lambda s: s.sum(min_count=1)),
+        realizado=("realizado", lambda s: s.sum(min_count=1)),  # mantém NaN se não houver dados
     )
     return g.sort_values("data")
 
@@ -356,7 +455,7 @@ def bar_line_figure(df_series: pd.DataFrame) -> go.Figure:
     )
 
     fig.update_layout(
-        title_text="",  # evita “undefined”
+        title_text="",
         height=520,
         barmode="overlay",
         bargap=0.28,
@@ -385,24 +484,32 @@ def bar_line_figure(df_series: pd.DataFrame) -> go.Figure:
     )
     return fig
 
-def top5_representatividade_rendas(dff: pd.DataFrame) -> pd.DataFrame:
+
+def top5_representatividade_rendas(df_time: pd.DataFrame) -> pd.DataFrame:
     """
-    Retorna dataframe com Top 5 produtos por renda (Realizado se existir; senão Orçado),
-    com coluna share (%).
+    Representatividade por produto usando apenas Rendas.
+    - Usa subprodutos 18202* e exclui TOTAL 18202 (para não distorcer)
+    - Se existir realizado no recorte, usa realizado; senão, orçado
+    - Retorna Top 5 + "Outros"
     """
-    x = dff[dff["tipo"] == "Rendas"].copy()
+    x = df_time[df_time["tipo"] == "Rendas"].copy()
     if x.empty:
         return pd.DataFrame()
 
-    # Se existir realizado em algum lugar do recorte, usamos realizado; senão, orçado.
-    has_real = x["realizado"].notna().any() and (x["realizado"].sum(min_count=1) is not np.nan)
+    # Excluir TOTAL 18202 e manter somente subprodutos (18202XXXX...)
+    x = x[x["produto_cod"].astype(str).str.startswith("18202")]
+    x = x[x["produto_cod"].astype(str) != "18202"]
+
+    if x.empty:
+        return pd.DataFrame()
+
+    has_real = x["realizado"].notna().any() and (not np.isnan(float(x["realizado"].sum(min_count=1))))
     metric = "realizado" if has_real else "orcado"
 
     g = (
         x.groupby(["produto_cod", "produto"], as_index=False)
          .agg(valor=(metric, lambda s: s.sum(min_count=1)))
     )
-
     g = g.dropna()
     g = g[g["valor"] > 0]
     if g.empty:
@@ -411,7 +518,7 @@ def top5_representatividade_rendas(dff: pd.DataFrame) -> pd.DataFrame:
     g = g.sort_values("valor", ascending=False)
 
     top5 = g.head(5).copy()
-    rest = g.iloc[5:]["valor"].sum() if len(g) > 5 else 0.0
+    rest = float(g.iloc[5:]["valor"].sum()) if len(g) > 5 else 0.0
 
     if rest > 0:
         top5 = pd.concat(
@@ -420,19 +527,49 @@ def top5_representatividade_rendas(dff: pd.DataFrame) -> pd.DataFrame:
         )
 
     total = float(top5["valor"].sum())
-    top5["share"] = top5["valor"] / total
+    top5["share"] = top5["valor"] / total if total > 0 else 0.0
     top5["metric"] = metric
     return top5
 
 
+def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
+    metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
+    # Reverter para ficar do menor para o maior em H-bar
+    rep_plot = rep.iloc[::-1].copy()
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            y=rep_plot["produto"],
+            x=rep_plot["valor"],
+            orientation="h",
+            marker=dict(color=BRAND["blue"]),
+            opacity=0.80,
+            customdata=(rep_plot["share"] * 100).round(1),
+            hovertemplate="<b>%{y}</b><br>"
+                          f"Rendas ({metric_lbl}): " + "%{x:,.2f}<br>"
+                          "Share: %{customdata}%<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title_text="",
+        height=360,
+        paper_bgcolor=BRAND["bg"],
+        plot_bgcolor=BRAND["card"],
+        margin=dict(l=14, r=14, t=20, b=14),
+        xaxis=dict(gridcolor=BRAND["grid"], tickfont=dict(color=BRAND["muted"])),
+        yaxis=dict(tickfont=dict(color=BRAND["muted"])),
+        showlegend=False,
+    )
+    return fig
+
 
 # ==========================================================
-# App
+# App start
 # ==========================================================
 inject_css()
 px.defaults.template = make_plotly_template()
 
-# Top bar
 st.markdown(
     f"""
     <div class="topbar">
@@ -463,7 +600,11 @@ if not uploaded:
 
 df = parse_relatorio(uploaded)
 
-# Period controls
+if df.empty:
+    st.error("Não consegui interpretar o CSV. Verifique se é o relatório exportado no mesmo padrão de colunas.")
+    st.stop()
+
+# Período
 years = sorted(df["ano"].unique().tolist())
 with st.sidebar:
     ano_sel = None
@@ -473,7 +614,14 @@ with st.sidebar:
     if periodo == "Mês":
         mes_sel = st.selectbox("Mês", list(range(1, 13)), index=0)
 
-# Produto controls
+# Aplicar filtro de tempo primeiro (para ser base da representatividade)
+df_time = df.copy()
+if periodo == "Ano" and ano_sel is not None:
+    df_time = df_time[df_time["ano"] == ano_sel]
+if periodo == "Mês" and ano_sel is not None and mes_sel is not None:
+    df_time = df_time[(df_time["ano"] == ano_sel) & (df_time["mes"] == mes_sel)]
+
+# Produtos
 products = df[["produto_cod", "produto"]].drop_duplicates().sort_values("produto")
 default_codes = [c for c in ["18201", "18202"] if c in set(products["produto_cod"])]
 
@@ -489,47 +637,34 @@ selected_set, warn_list = safe_drop_totals(set(selected))
 for w in warn_list:
     st.warning(w)
 
-dff = df[df["produto_cod"].isin(selected_set)] if selected_set else df.copy()
-
-# Apply time filter
-if periodo == "Ano" and ano_sel is not None:
-    dff = dff[dff["ano"] == ano_sel]
-if periodo == "Mês" and ano_sel is not None and mes_sel is not None:
-    dff = dff[(dff["ano"] == ano_sel) & (dff["mes"] == mes_sel)]
-
+# Aplicar filtro de produto sobre o recorte de tempo
+dff = df_time[df_time["produto_cod"].isin(selected_set)] if selected_set else df_time.copy()
 prod_label = selected_products_label(products, selected_set)
 
 # ==========================================================
-# KPIs (Saldo snapshot + Rendas acumulado)
+# KPIs (Saldo snapshot + Rendas acumulado) + faróis
 # ==========================================================
-def sum_at_date(tipo: str, col: str, dt: pd.Timestamp) -> float:
-    x = dff[(dff["tipo"] == tipo) & (dff["data"] == dt)][col]
+def sum_at_date(dff_: pd.DataFrame, tipo: str, col: str, dt: pd.Timestamp) -> float:
+    x = dff_[(dff_["tipo"] == tipo) & (dff_["data"] == dt)][col]
     if col == "realizado":
-        return float(x.sum(min_count=1))  # evita NaN -> 0
+        return float(x.sum(min_count=1))
     return float(x.sum(skipna=True))
 
-def last_real_date_with_data(tipo: str, col: str, eps: float = 0.0001):
-    x = dff[(dff["tipo"] == tipo)][["data", col]].copy()
-    x = x.dropna()
-    # ignora zeros (ex.: mês ainda não fechado)
-    x = x[x[col].abs() > eps]
-    if x.empty:
-        return None
-    return pd.to_datetime(x["data"]).max()
 
-
-# Saldo snapshot no último mês com realizado
-saldo_last_real_dt = last_real_date_with_data("Saldo", "realizado")
-
-
-saldo_real_last = sum_at_date("Saldo", "realizado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
-saldo_orc_same = sum_at_date("Saldo", "orcado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
+# Saldo: último mês com realizado “concreto” (não nulo e != 0)
+saldo_last_real_dt = last_real_date_with_data(dff, "Saldo", "realizado", eps=0.0001)
+saldo_real_last = sum_at_date(dff, "Saldo", "realizado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
+saldo_orc_same = sum_at_date(dff, "Saldo", "orcado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
 saldo_gap = (saldo_real_last - saldo_orc_same) if (saldo_last_real_dt is not None and not np.isnan(saldo_orc_same)) else np.nan
 
-# Rendas acumulado no recorte
+# Rendas: acumulado no recorte
 r = dff[dff["tipo"] == "Rendas"]
 rendas_orc = float(r["orcado"].sum(skipna=True))
 rendas_real = float(r["realizado"].sum(min_count=1))
+
+# Faróis
+saldo_farol_txt, saldo_farol_color = kpi_status(saldo_real_last, saldo_orc_same)
+rendas_farol_txt, rendas_farol_color = kpi_status(rendas_real, rendas_orc)
 
 st.markdown('<p class="section-title">KPIs</p>', unsafe_allow_html=True)
 st.markdown(
@@ -538,26 +673,33 @@ st.markdown(
       <div class="kpi-card">
         <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
         <p class="kpi-value">{fmt_br(saldo_real_last)}</p>
+        {badge_html(saldo_farol_txt, saldo_farol_color)}
+        <div class="kpi-sub">Base: <b>{saldo_last_real_dt.strftime("%b/%Y") if saldo_last_real_dt is not None else "—"}</b></div>
       </div>
+
       <div class="kpi-card">
         <div class="kpi-label">Saldo • Gap vs Orçado (mesmo mês)</div>
         <p class="kpi-value">{fmt_br(saldo_gap)}</p>
+        <div class="kpi-sub">Comparação no mês-base do realizado.</div>
       </div>
+
       <div class="kpi-card">
         <div class="kpi-label">Rendas • Orçado (acumulado no recorte)</div>
         <p class="kpi-value">{fmt_br(rendas_orc)}</p>
       </div>
+
       <div class="kpi-card">
         <div class="kpi-label">Rendas • Realizado (acumulado no recorte)</div>
         <p class="kpi-value">{fmt_br(rendas_real)}</p>
+        {badge_html(rendas_farol_txt, rendas_farol_color)}
       </div>
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 # ==========================================================
-# Gráfico 1: Saldo (barras + linha)
+# Gráfico 1: Saldo
 # ==========================================================
 st.markdown('<p class="section-title">Evolução • Saldo da Carteira</p>', unsafe_allow_html=True)
 st.markdown(f'<div class="pill"><span style="opacity:.8">Produtos:</span> <b>{prod_label}</b></div>', unsafe_allow_html=True)
@@ -569,7 +711,7 @@ else:
     st.plotly_chart(bar_line_figure(s_saldo), use_container_width=True)
 
 # ==========================================================
-# Gráfico 2: Rendas (barras + linha)
+# Gráfico 2: Rendas
 # ==========================================================
 st.markdown('<p class="section-title">Evolução • Rendas da Carteira</p>', unsafe_allow_html=True)
 st.markdown(f'<div class="pill"><span style="opacity:.8">Produtos:</span> <b>{prod_label}</b></div>', unsafe_allow_html=True)
@@ -580,7 +722,18 @@ if s_rendas.empty:
 else:
     st.plotly_chart(bar_line_figure(s_rendas), use_container_width=True)
 
-saldo_farol_txt, saldo_farol_color = kpi_status(saldo_real_last, saldo_orc_same)
-rendas_farol_txt, rendas_farol_color = kpi_status(rendas_real, rendas_orc)
+# ==========================================================
+# Representatividade: Top 5 produtos (Rendas)
+# ==========================================================
+st.markdown('<p class="section-title">Representatividade • Produtos (Rendas)</p>', unsafe_allow_html=True)
 
+# Aqui usamos a base de tempo (df_time), e não o filtro de produto,
+# para mostrar os 5 principais produtos que compõem o resultado de crédito no recorte.
+rep = top5_representatividade_rendas(df_time)
 
+if rep.empty:
+    st.info("Sem dados suficientes de rendas para calcular representatividade neste recorte.")
+else:
+    st.plotly_chart(representatividade_figure(rep), use_container_width=True)
+    metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
+    st.caption(f"Base: Rendas ({metric_lbl}) no recorte de tempo. Top 5 + Outros. (TOTAL 18202 é excluído).")
