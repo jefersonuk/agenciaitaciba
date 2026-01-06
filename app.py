@@ -45,24 +45,32 @@ st.set_page_config(
 st.markdown(
     f"""
 <style>
-/* Base */
-html, body, [class*="css"]  {{
-  color: {BRAND["ink"]};
+/* Aplica no container do Streamlit (isso impede voltar pro tema claro) */
+div[data-testid="stAppViewContainer"] {{
   background: radial-gradient(1200px 700px at 20% 10%, rgba(30,10,232,0.18), transparent 60%),
               radial-gradient(900px 600px at 85% 0%, rgba(0,171,22,0.14), transparent 55%),
-              linear-gradient(180deg, {BRAND["bg"]}, {BRAND["bg2"]});
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+              linear-gradient(180deg, {BRAND["bg"]}, {BRAND["bg2"]}) !important;
+  color: {BRAND["ink"]} !important;
+}}
+
+header[data-testid="stHeader"] {{
+  background: transparent !important;
 }}
 
 section[data-testid="stSidebar"] {{
-  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-  border-right: 1px solid {BRAND["border"]};
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)) !important;
+  border-right: 1px solid {BRAND["border"]} !important;
 }}
 
 .block-container {{
   padding-top: 1.2rem;
   padding-bottom: 2rem;
 }}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
 
 .header-wrap {{
   border: 1px solid {BRAND["border"]};
