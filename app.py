@@ -435,103 +435,129 @@ def type_from_code(code: str) -> str:
 
 @st.cache_data(show_spinner=False)
 def load_report(file_bytes: bytes) -> pd.DataFrame:
-    """
-    Lê o CSV matricial (anos em blocos por colunas).
-    Espera:
-    - Linha 0: meses ('jan','fev',...)
-    - Linha 1: rótulos de colunas (Orçado/Realizado/Var...)
-    - A partir da linha 2: dados
-    """
+    from io import BytesIO
+
     bio = BytesIO(file_bytes)
 
-    # tenta ler como ; (padrão export) / fallback
-    try:
-        raw = pd.read_csv(bio, sep=";", engine="python", encoding="latin1")
-    except Exception:
-        bio.seek(0)
-        raw = pd.read_csv(bio, sep=None, engine="python", encoding="latin1")
+    # lê como matriz (evita bagunça de header do export)
+    raw = pd.read_csv(bio, header=None, encoding="latin1", sep=None, engine="python")
 
-    cols = [str(c) for c in raw.columns]
+    # remove colunas totalmente vazias
+    raw = raw.dropna(axis=1, how="all")
 
-    # anos = colunas que são números (ex: '2025','2026','2024'...)
-    year_cols = []
-    for c in cols:
-        if re.fullmatch(r"\d{4}", str(c).strip()):
-            year_cols.append(str(c).strip())
+    # remove linhas totalmente vazias
+    raw = raw.dropna(axis=0, how="all").reset_index(drop=True)
 
-    if not year_cols:
-        raise ValueError("Não encontrei colunas de ano (ex: 2025/2026) no CSV.")
+    # garante pelo menos 2 colunas (código e descrição)
+    if raw.shape[1] < 3:
+        return pd.DataFrame(columns=["data", "ano", "mes", "produto_cod", "produto", "tipo", "orcado", "realizado"])
 
-    # ordena por posição no arquivo (ordem visual)
-    year_cols = sorted(year_cols, key=lambda y: cols.index(y))
+    # --- helpers internos ---
+    def find_year_row(dfmat: pd.DataFrame, year: int) -> int | None:
+        y = str(year)
+        c0 = dfmat.iloc[:, 0].astype(str).str.contains(y, na=False)
+        c1 = dfmat.iloc[:, 1].astype(str).str.contains(y, na=False) if dfmat.shape[1] > 1 else False
+        idxs = dfmat.index[(c0 | c1)].tolist()
+        return idxs[0] if idxs else None
 
-    records = []
+    def parse_part(dfmat: pd.DataFrame, year: int, has_realizado: bool) -> pd.DataFrame:
+        if dfmat.empty:
+            cols = ["data", "ano", "mes", "produto_cod", "produto", "tipo", "orcado", "realizado"]
+            return pd.DataFrame(columns=cols)
 
-    for i, year_str in enumerate(year_cols):
-        y = int(year_str)
-        start = cols.index(year_str)
-        end = cols.index(year_cols[i + 1]) if i + 1 < len(year_cols) else len(cols)
+        # primeira linha do bloco = cabeçalho de meses
+        header = dfmat.iloc[0].tolist()
 
-        code_col = cols[start]
-        desc_col = cols[start + 1] if (start + 1) < end else None
+        # identifica onde estão os meses no cabeçalho
+        month_starts = []
+        for j, cell in enumerate(header):
+            mon = normalize_month_label(cell)
+            if mon is not None:
+                month_starts.append((mon, j))
 
-        if desc_col is None:
-            continue
+        if not month_starts:
+            cols = ["data", "ano", "mes", "produto_cod", "produto", "tipo", "orcado", "realizado"]
+            return pd.DataFrame(columns=cols)
 
-        # colunas de meses começam em start+2, em blocos de 4
-        month_blocks = []
-        j = start + 2
-        while j + 1 < end:
-            mon_lbl = normalize_month_label(raw.iloc[0, j])  # linha 0
-            if mon_lbl is None:
-                j += 1
-                continue
-            orc_col = cols[j]
-            rea_col = cols[j + 1]  # costuma ser Realizado
-            month_blocks.append((mon_lbl, orc_col, rea_col))
-            j += 4  # pula Var(R$) e Var(%)
+        # por segurança: precisa ter pelo menos uma coluna depois do label do mês
+        month_cols = []
+        for mon, j in month_starts:
+            orc_col = j + 1
+            real_col = j + 2 if has_realizado else None
+            if orc_col < dfmat.shape[1]:
+                month_cols.append((mon, orc_col, real_col))
 
-        data_rows = raw.iloc[2:, start:end]
+        data_rows = dfmat.iloc[1:].copy()
 
+        recs = []
         for _, r in data_rows.iterrows():
-            code = str(r[code_col]).strip()
-            if code.lower() in ("nan", "none") or code == "":
+            code = str(r.iloc[0]).strip()
+            if code.lower() in ("nan", "none", ""):
                 continue
 
-            desc = str(r[desc_col]).strip()
+            desc = str(r.iloc[1]).strip()
             desc = re.sub(r"\s+", " ", desc).strip()
 
-            for mon_lbl, orc_col, rea_col in month_blocks:
-                dt_ = datetime(y, PT_MONTH[mon_lbl], 1)
-                orc = parse_ptbr_number(r.get(orc_col))
-                rea = parse_ptbr_number(r.get(rea_col))
+            for mon, orc_col, real_col in month_cols:
+                orc = parse_ptbr_number(r.iloc[orc_col]) if orc_col is not None else np.nan
+                rea = parse_ptbr_number(r.iloc[real_col]) if (has_realizado and real_col is not None and real_col < dfmat.shape[1]) else np.nan
 
-                records.append(
+                dt_ = datetime(year, PT_MONTH[mon], 1)
+
+                # não cria linha totalmente vazia
+                if (orc is None or (isinstance(orc, float) and np.isnan(orc))) and (rea is None or (isinstance(rea, float) and np.isnan(rea))):
+                    continue
+
+                recs.append(
                     {
                         "data": pd.to_datetime(dt_),
-                        "ano": y,
-                        "mes": PT_MONTH[mon_lbl],
+                        "ano": year,
+                        "mes": PT_MONTH[mon],
                         "produto_cod": str(code),
                         "produto": desc,
-                        "tipo": type_from_code(code),
+                        "tipo": type_from_code(str(code)),
                         "orcado": orc,
                         "realizado": rea,
                     }
                 )
 
-    df = pd.DataFrame(records)
+        df_out = pd.DataFrame(recs)
+        return df_out
+
+    # --- separa 2025 e 2026 pelo marcador ---
+    idx_2026 = find_year_row(raw, 2026)
+
+    if idx_2026 is None:
+        # não achou o bloco 2026 no CSV -> retorna só 2025
+        df_2025 = parse_part(raw, 2025, has_realizado=True)
+        df = df_2025
+    else:
+        raw_2025 = raw.iloc[:idx_2026].copy()
+        raw_2026 = raw.iloc[idx_2026:].copy()
+
+        # às vezes a linha do "2026" é só um título. Se tiver pouca info, pula uma linha.
+        # (heurística: se a "linha 0" do bloco 2026 não contém meses, tenta usar a próxima)
+        header_2026 = raw_2026.iloc[0].tolist()
+        has_months_2026 = any(normalize_month_label(x) is not None for x in header_2026)
+        if not has_months_2026 and len(raw_2026) > 1:
+            raw_2026 = raw_2026.iloc[1:].copy()
+
+        df_2025 = parse_part(raw_2025, 2025, has_realizado=True)
+        df_2026 = parse_part(raw_2026, 2026, has_realizado=False)
+
+        df = pd.concat([df_2025, df_2026], ignore_index=True)
 
     # limpeza final
+    if df.empty:
+        return pd.DataFrame(columns=["data", "ano", "mes", "produto_cod", "produto", "tipo", "orcado", "realizado"])
+
     df["produto_cod"] = df["produto_cod"].astype(str)
     df["produto"] = df["produto"].astype(str)
     df["tipo"] = df["tipo"].astype(str)
+    df = df.sort_values(["data", "produto_cod"]).reset_index(drop=True)
 
-    # remove linhas totalmente vazias (sem orçado e sem realizado)
-    df = df[~(df["orcado"].isna() & df["realizado"].isna())].copy()
-
-    df.sort_values(["data", "produto_cod"], inplace=True)
-    df.reset_index(drop=True, inplace=True)
     return df
+
 
 
 def last_nonzero_date(s: pd.Series, dates: pd.Series) -> pd.Timestamp | None:
