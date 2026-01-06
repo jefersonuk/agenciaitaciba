@@ -577,4 +577,4 @@ if s_rendas.empty:
     st.info("Sem dados para Rendas nesse recorte.")
 else:
     st.plotly_chart(bar_line_figure(s_rendas), use_container_width=True)
-```
+
