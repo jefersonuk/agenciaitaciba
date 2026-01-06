@@ -433,7 +433,60 @@ def series_for(tipo: str) -> pd.DataFrame:
     return g.sort_values("data")
 
 
-col1, col2 = st.columns(2)
+def bar_line_figure(df_series: pd.DataFrame, title: str) -> go.Figure:
+    fig = go.Figure()
+
+    # Orçado = barras
+    fig.add_trace(
+        go.Bar(
+            x=df_series["data"],
+            y=df_series["orcado"],
+            name="Orçado",
+            marker_color=BRAND["blue"],
+            opacity=0.65,
+            hovertemplate="<b>%{x|%b/%Y}</b><br>Orçado: %{y:,.2f}<extra></extra>",
+        )
+    )
+
+    # Realizado = linha (para quando não há dados, porque vira NaN)
+    fig.add_trace(
+        go.Scatter(
+            x=df_series["data"],
+            y=df_series["realizado"],
+            name="Realizado",
+            mode="lines+markers",
+            line=dict(color=BRAND["green"], width=3),
+            marker=dict(size=6),
+            connectgaps=False,
+            hovertemplate="<b>%{x|%b/%Y}</b><br>Realizado: %{y:,.2f}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        height=460,
+        barmode="overlay",
+        title=None,
+        legend_title_text="",
+        hovermode="x unified",
+    )
+    return fig
+
+# --- Saldo (em cima)
+st.markdown('<p class="section-title">Evolução • Saldo da Carteira</p>', unsafe_allow_html=True)
+s_saldo = series_for("Saldo")
+if s_saldo.empty:
+    st.info("Sem dados para Saldo nesse recorte.")
+else:
+    st.plotly_chart(bar_line_figure(s_saldo, "Saldo"), use_container_width=True)
+
+# --- Rendas (embaixo)
+st.markdown('<p class="section-title">Evolução • Rendas da Carteira</p>', unsafe_allow_html=True)
+s_rendas = series_for("Rendas")
+if s_rendas.empty:
+    st.info("Sem dados para Rendas nesse recorte.")
+else:
+    st.plotly_chart(bar_line_figure(s_rendas, "Rendas"), use_container_width=True)
+
 
 with col1:
     st.markdown('<p class="section-title">Evolução • Saldo da Carteira</p>', unsafe_allow_html=True)
