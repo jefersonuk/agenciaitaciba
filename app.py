@@ -435,6 +435,134 @@ def sum_at_date(dff: pd.DataFrame, tipo: str, col: str, dt: pd.Timestamp) -> flo
 
 # ==========================================================
 # Representatividade (Top 5 + Outros) - Rendas
+def top5_representatividade_rendas(df_time: pd.DataFrame) -> pd.DataFrame:
+    """
+    Top 5 + Outros para Rendas (por produto), no recorte df_time.
+    Usa Realizado se houver dado; senão usa Orçado.
+    Exclui TOTAL 18202 para evitar distorção.
+    """
+    x = df_time[df_time["tipo"] == "Rendas"].copy()
+    if x.empty:
+        return pd.DataFrame()
+
+    x["produto_cod"] = x["produto_cod"].astype(str)
+
+    # mantém apenas linha 18202*
+    x = x[x["produto_cod"].str.startswith("18202")]
+
+    # exclui TOTAL 18202
+    x = x[x["produto_cod"] != "18202"]
+    if x.empty:
+        return pd.DataFrame()
+
+    # escolhe métrica: Realizado se existir dado; senão Orçado
+    has_real = x["realizado"].notna().any() and (float(x["realizado"].sum(min_count=1)) > 0)
+    metric = "realizado" if has_real else "orcado"
+
+    g = (
+        x.groupby(["produto_cod", "produto"], as_index=False)
+         .agg(valor=(metric, lambda s: s.sum(min_count=1)))
+    )
+
+    g = g.dropna()
+    g = g[g["valor"] > 0]
+    if g.empty:
+        return pd.DataFrame()
+
+    g = g.sort_values("valor", ascending=False)
+
+    top5 = g.head(5).copy()
+    rest = float(g.iloc[5:]["valor"].sum()) if len(g) > 5 else 0.0
+
+    if rest > 0:
+        top5 = pd.concat(
+            [top5, pd.DataFrame([{"produto_cod": "OUTROS", "produto": "Outros", "valor": rest}])],
+            ignore_index=True,
+        )
+
+    total = float(top5["valor"].sum())
+    top5["share"] = top5["valor"] / total if total > 0 else 0.0
+    top5["metric"] = metric
+    return top5
+
+
+def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
+    """
+    Gráfico premium: barras horizontais (Top 5 + Outros),
+    % + valor abreviado, 'Outros' sempre por último.
+    """
+    def human_millions(v: float) -> str:
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            return "—"
+        abs_v = abs(v)
+        if abs_v >= 1_000_000:
+            return f"{v/1_000_000:.1f}M".replace(".", ",")
+        if abs_v >= 1_000:
+            return f"{v/1_000:.0f}k".replace(".", ",")
+        return f"{v:.0f}".replace(".", ",")
+
+    metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
+
+    rep2 = rep.copy()
+    rep2["is_outros"] = (rep2["produto"] == "Outros").astype(int)
+    rep2 = rep2.sort_values(["is_outros", "valor"], ascending=[True, False]).drop(columns=["is_outros"])
+
+    rep_plot = rep2.iloc[::-1].copy()
+    rep_plot["pct"] = (rep_plot["share"] * 100).round(1)
+    rep_plot["label"] = rep_plot.apply(
+        lambda r: f"{r['pct']:.1f}%  •  {human_millions(float(r['valor']))}", axis=1
+    )
+
+    grad = ["#2B59FF", "#3550FF", "#3D47FF", "#453DFF", "#4D33FF", "#5B2BD6"]
+    colors = []
+    k = 0
+    for p in rep_plot["produto"].tolist():
+        if p == "Outros":
+            colors.append("rgba(242,246,255,0.18)")
+        else:
+            colors.append(grad[min(k, len(grad) - 1)])
+            k += 1
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            y=rep_plot["produto"],
+            x=rep_plot["valor"],
+            orientation="h",
+            marker=dict(color=colors, line=dict(width=0)),
+            text=rep_plot["label"],
+            textposition="outside",
+            textfont=dict(color=BRAND["muted"], size=12),
+            customdata=rep_plot["pct"],
+            hovertemplate="<b>%{y}</b><br>"
+                          f"Rendas ({metric_lbl}): " + "%{x:,.2f}<br>"
+                          "Share: %{customdata:.1f}%<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        height=420,
+        paper_bgcolor=BRAND["bg"],
+        plot_bgcolor=BRAND["card"],
+        margin=dict(l=14, r=18, t=10, b=14),
+        showlegend=False,
+        xaxis=dict(
+            title="",
+            gridcolor="rgba(242,246,255,0.04)",
+            zeroline=False,
+            tickfont=dict(color=BRAND["muted"]),
+        ),
+        yaxis=dict(
+            title="",
+            tickfont=dict(color=BRAND["ink"]),
+        ),
+    )
+
+    xmax = float(rep_plot["valor"].max()) if len(rep_plot) else 0
+    fig.update_xaxes(range=[0, xmax * 1.18])
+
+    return fig
+
 # ==========================================================
 st.markdown('<p class="section-title">Representatividade • Produtos (Rendas)</p>', unsafe_allow_html=True)
 
@@ -615,8 +743,7 @@ else:
     st.plotly_chart(bar_line_figure(s_rendas), use_container_width=True)
 
 # ==========================================================
-# Representatividade (Top 5 Rendas) - no recorte de tempo
-# ==========================================================
+
 # ==========================================================
 # Representatividade (Top 5 Rendas)
 # ==========================================================
