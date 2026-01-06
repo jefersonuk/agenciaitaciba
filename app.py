@@ -534,8 +534,21 @@ def top5_representatividade_rendas(df_time: pd.DataFrame) -> pd.DataFrame:
 
 def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
     metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
-    # Reverter para ficar do menor para o maior em H-bar
-    rep_plot = rep.iloc[::-1].copy()
+
+    # Ordena desc e prepara plot (topo = maior)
+    rep_plot = rep.sort_values("valor", ascending=True).copy()
+
+    # Gradiente moderno (azul → roxo), com "Outros" mais neutro
+    grad = ["#2B59FF", "#3550FF", "#3D47FF", "#453DFF", "#4D33FF", "#5B2BD6"]
+    colors = []
+    for p in rep_plot["produto"].tolist():
+        if p == "Outros":
+            colors.append("rgba(242,246,255,0.22)")
+        else:
+            colors.append(grad[min(len(colors), len(grad)-1)])
+
+    # Texto (% share) no fim da barra
+    perc = (rep_plot["share"] * 100).round(1).astype(str) + "%"
 
     fig = go.Figure()
     fig.add_trace(
@@ -543,25 +556,41 @@ def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
             y=rep_plot["produto"],
             x=rep_plot["valor"],
             orientation="h",
-            marker=dict(color=BRAND["blue"]),
-            opacity=0.80,
-            customdata=(rep_plot["share"] * 100).round(1),
+            marker=dict(
+                color=colors,
+                line=dict(width=0),
+            ),
+            text=perc,
+            textposition="outside",
+            textfont=dict(color=BRAND["muted"], size=12),
             hovertemplate="<b>%{y}</b><br>"
                           f"Rendas ({metric_lbl}): " + "%{x:,.2f}<br>"
-                          "Share: %{customdata}%<extra></extra>",
+                          "Share: %{text}<extra></extra>",
         )
     )
+
     fig.update_layout(
         title_text="",
-        height=360,
+        height=380,
         paper_bgcolor=BRAND["bg"],
         plot_bgcolor=BRAND["card"],
-        margin=dict(l=14, r=14, t=20, b=14),
-        xaxis=dict(gridcolor=BRAND["grid"], tickfont=dict(color=BRAND["muted"])),
-        yaxis=dict(tickfont=dict(color=BRAND["muted"])),
+        margin=dict(l=14, r=14, t=12, b=14),
+        xaxis=dict(
+            gridcolor="rgba(242,246,255,0.05)",
+            tickfont=dict(color=BRAND["muted"]),
+            zeroline=False,
+        ),
+        yaxis=dict(
+            tickfont=dict(color=BRAND["ink"]),
+        ),
         showlegend=False,
     )
+
+    # Deixa espaço para os % fora da barra
+    fig.update_xaxes(range=[0, rep_plot["valor"].max() * 1.12])
+
     return fig
+ fig
 
 
 # ==========================================================
@@ -727,6 +756,13 @@ else:
 # ==========================================================
 # Representatividade: Top 5 produtos (Rendas)
 # ==========================================================
+metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
+st.markdown(
+    f'<div class="pill"><span style="opacity:.8">Base:</span> <b>Rendas ({metric_lbl})</b></div>',
+    unsafe_allow_html=True
+)
+
+
 st.markdown('<p class="section-title">Representatividade • Produtos (Rendas)</p>', unsafe_allow_html=True)
 
 # Aqui usamos a base de tempo (df_time), e não o filtro de produto,
