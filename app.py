@@ -101,11 +101,11 @@ section[data-testid="stSidebar"] {{
   gap: 12px;
 }}
 
-.dot-badge{
+.dot-badge{{
   width: 10px; height: 10px;
   border-radius: 999px;
   display:inline-block;
-}
+}}
 
 
 .section-title {{
