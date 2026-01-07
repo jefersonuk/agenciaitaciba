@@ -1,6 +1,6 @@
+# app.py
 import re
-import math
-from datetime import datetime, date
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -198,7 +198,6 @@ PT_MONTH = {
     "Jan": 1, "Fev": 2, "Mar": 3, "Abr": 4, "Mai": 5, "Jun": 6,
     "Jul": 7, "Ago": 8, "Set": 9, "Out": 10, "Nov": 11, "Dez": 12
 }
-
 MONTH_NUM_TO_LABEL = {v: k for k, v in PT_MONTH.items()}
 
 
@@ -212,7 +211,7 @@ def parse_ptbr_number(x):
     s = s.replace(".", "").replace(",", ".")
     try:
         return float(s)
-    except:
+    except Exception:
         return np.nan
 
 
@@ -242,6 +241,7 @@ def month_label(dt_):
 
 
 def type_from_code(code_str: str) -> str:
+    code_str = str(code_str)
     if code_str.startswith("18201"):
         return "Saldo"
     if code_str.startswith("18202"):
@@ -278,119 +278,184 @@ def make_plotly_layout_base():
 
 
 # ==========================
-# Parser do CSV matricial (2025 + 2026)
+# Normalização de colunas (suporta CSV "normalizado" + variações)
 # ==========================
-@st.cache_data(show_spinner=False)
-def load_report(file_bytes: bytes) -> pd.DataFrame:
-    from io import BytesIO
-    bio = BytesIO(file_bytes)
-    raw = pd.read_csv(bio, sep=None, engine="python", encoding="latin1")
+def _slug(s: str) -> str:
+    s = str(s).strip().lower()
+    # remove acentos comuns
+    s = (s.replace("ç", "c")
+           .replace("ã", "a").replace("á", "a").replace("à", "a").replace("â", "a")
+           .replace("é", "e").replace("ê", "e")
+           .replace("í", "i")
+           .replace("ó", "o").replace("ô", "o").replace("õ", "o")
+           .replace("ú", "u"))
+    s = re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+    return s
 
-    # 2025
-    col_code_2025 = raw.columns[0]
-    col_desc_2025 = raw.columns[1]
 
-    month_start_cols = []
-    for c in raw.columns[2:50]:
-        if str(raw.loc[0, c]) in PT_MONTH.keys():
-            month_start_cols.append(c)
+def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df.columns = [_slug(c) for c in df.columns]
 
-    blocks_2025 = []
-    for start in month_start_cols:
-        idx = raw.columns.get_loc(start)
-        block_cols = raw.columns[idx:idx + 4]
-        mon = str(raw.loc[0, start]).strip()
-        blocks_2025.append((mon, block_cols.tolist()))
+    # mapeia formatos comuns -> nomes internos esperados pelo app
+    rename_map = {
+        # anos/meses
+        "ano": "ano",
+        "anos": "ano",
+        "mes": "mes",
+        "mes_num": "mes",
+        "mes_txt": "mes_txt",
 
-    data_rows_2025 = raw.iloc[2:64].copy()
+        # produto
+        "produto_cd": "produto_cod",
+        "produto_cod": "produto_cod",
+        "produto": "produto_cod",          # CSV normalizado usa "Produto" (código)
+        "cod": "produto_cod",
+        "codigo": "produto_cod",
+        "c_d": "produto_cod",
 
-    recs = []
-    for _, r in data_rows_2025.iterrows():
-        code = str(r[col_code_2025]).strip()
-        if code.lower() == "nan" or code == "" or code == "None":
-            continue
-        desc = str(r[col_desc_2025]).strip()
-        desc = re.sub(r"\s+", " ", desc).strip()
+        # descrição
+        "descricao": "produto",
+        "produto_desc": "produto",
+        "descricao_produto": "produto",
+        "desc": "produto",
 
-        for mon, cols in blocks_2025:
-            orc = parse_ptbr_number(r[cols[0]])
-            rea = parse_ptbr_number(r[cols[1]])
-            dt_ = datetime(2025, PT_MONTH[mon], 1)
+        # valores
+        "orcado": "orcado",
+        "oracado": "orcado",
+        "orcamento": "orcado",
+        "realizado": "realizado",
+        "real": "realizado",
+    }
 
-            recs.append(
-                {
-                    "data": pd.to_datetime(dt_),
-                    "ano": 2025,
-                    "mes": PT_MONTH[mon],
-                    "produto_cod": code,
-                    "produto": desc,
-                    "tipo": type_from_code(code),
-                    "orcado": orc,
-                    "realizado": rea,
-                }
-            )
-
-    df_2025 = pd.DataFrame(recs)
-
-    # 2026
-    code_col_2026 = None
-    desc_col_2026 = None
-    for c in raw.columns:
-        if str(raw.loc[0, c]).strip() == "Cód":
-            code_col_2026 = c
-            idx = raw.columns.get_loc(c)
-            if idx + 1 < len(raw.columns):
-                desc_col_2026 = raw.columns[idx + 1]
-            break
-
-    if code_col_2026 is not None and desc_col_2026 is not None:
-        idx_code = raw.columns.get_loc(code_col_2026)
-        month_cols_2026 = []
-        for c in raw.columns[idx_code + 3:]:
-            lab = str(raw.loc[0, c]).strip()
-            if lab in PT_MONTH:
-                month_cols_2026.append((lab, c))
-
-        data_rows_2026 = raw.iloc[1:64].copy()
-
-        recs2 = []
-        for _, r in data_rows_2026.iterrows():
-            code = str(r[code_col_2026]).strip()
-            if code.lower() == "nan" or code == "" or code == "None":
-                continue
-            desc = str(r[desc_col_2026]).strip()
-            desc = re.sub(r"\s+", " ", desc).strip()
-
-            for mon, c in month_cols_2026:
-                orc = parse_ptbr_number(r[c])
-                dt_ = datetime(2026, PT_MONTH[mon], 1)
-                recs2.append(
-                    {
-                        "data": pd.to_datetime(dt_),
-                        "ano": 2026,
-                        "mes": PT_MONTH[mon],
-                        "produto_cod": code,
-                        "produto": desc,
-                        "tipo": type_from_code(code),
-                        "orcado": orc,
-                        "realizado": np.nan,
-                    }
-                )
-
-        df_2026 = pd.DataFrame(recs2)
-    else:
-        df_2026 = pd.DataFrame(columns=df_2025.columns)
-
-    df = pd.concat([df_2025, df_2026], ignore_index=True)
-
-    df["produto_cod"] = df["produto_cod"].astype(str)
-    df["produto"] = df["produto"].astype(str)
-    df["tipo"] = df["tipo"].astype(str)
-
-    df = df[~(df["orcado"].isna() & df["realizado"].isna())].copy()
-    df.sort_values(["data", "produto_cod"], inplace=True)
+    for src, dst in rename_map.items():
+        if src in df.columns and dst not in df.columns:
+            df.rename(columns={src: dst}, inplace=True)
 
     return df
+
+
+def _ensure_required(df: pd.DataFrame, required: list[str], label: str):
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise KeyError(f"Arquivo '{label}' sem colunas obrigatórias: {missing}. Colunas encontradas: {list(df.columns)}")
+
+
+def _finalize_long(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Recebe DF já "long" (com ano, mes, produto_cod, produto, orcado, realizado)
+    e garante tipos/colunas auxiliares.
+    """
+    df = df.copy()
+
+    # coerções
+    df["ano"] = pd.to_numeric(df["ano"], errors="coerce").astype("Int64")
+    df["mes"] = pd.to_numeric(df["mes"], errors="coerce").astype("Int64")
+
+    df["produto_cod"] = df["produto_cod"].astype(str).str.strip()
+    df["produto"] = df["produto"].astype(str).str.strip()
+
+    # números pt-br
+    df["orcado"] = df["orcado"].apply(parse_ptbr_number)
+    if "realizado" in df.columns:
+        df["realizado"] = df["realizado"].apply(parse_ptbr_number)
+    else:
+        df["realizado"] = np.nan
+
+    # data
+    df = df.dropna(subset=["ano", "mes"], how="any")
+    df["ano"] = df["ano"].astype(int)
+    df["mes"] = df["mes"].astype(int)
+
+    df["data"] = pd.to_datetime(
+        df["ano"].astype(str) + "-" + df["mes"].astype(str).str.zfill(2) + "-01",
+        errors="coerce",
+    )
+
+    df["tipo"] = df["produto_cod"].apply(type_from_code)
+
+    # limpa linhas vazias
+    df = df[~(df["orcado"].isna() & df["realizado"].isna())].copy()
+
+    # ordena
+    df.sort_values(["data", "produto_cod"], inplace=True)
+    df.reset_index(drop=True, inplace=True)
+
+    return df
+
+
+# ==========================
+# Loader (CSV normalizado + XLSX por abas)
+# ==========================
+@st.cache_data(show_spinner=False)
+def load_report_any(file_bytes: bytes | None, filename: str | None, fallback_path: str) -> pd.DataFrame:
+    """
+    Prioridade:
+      1) Upload CSV/XLSX (normalizado: Ano/Mes/Produto/Descricao/Orçado/Realizado)
+      2) fallback_path (CSV normalizado dentro do repo)
+    """
+    from io import BytesIO
+
+    if file_bytes is None:
+        # fallback local (sem upload)
+        try:
+            df0 = pd.read_csv(fallback_path, sep=None, engine="python", encoding="utf-8")
+        except Exception:
+            # tenta latin1 (muito comum em export)
+            df0 = pd.read_csv(fallback_path, sep=None, engine="python", encoding="latin1")
+        df0 = normalize_columns(df0)
+
+        _ensure_required(df0, ["ano", "mes", "produto_cod", "produto", "orcado"], label=fallback_path)
+        return _finalize_long(df0)
+
+    bio = BytesIO(file_bytes)
+    name = (filename or "").lower()
+
+    # XLSX com abas por ano
+    if name.endswith(".xlsx") or name.endswith(".xls"):
+        sheets = pd.read_excel(bio, sheet_name=None)  # dict {sheet: df}
+        frames = []
+        for sh, d in sheets.items():
+            if d is None or d.empty:
+                continue
+            d = normalize_columns(d)
+
+            # Se a aba não tiver 'ano' mas o nome da aba for "2020", "2021", etc, injeta ano.
+            if "ano" not in d.columns:
+                sh_year = re.sub(r"[^0-9]", "", str(sh))
+                if len(sh_year) == 4:
+                    d["ano"] = int(sh_year)
+
+            # tenta padrões comuns do seu normalizado
+            # (ano, mes, produto_cod, produto, orcado, realizado)
+            needed_min = ["ano", "mes", "produto_cod", "produto", "orcado"]
+            try:
+                _ensure_required(d, needed_min, label=f"aba:{sh}")
+            except KeyError:
+                # ignora abas que não estão no formato esperado
+                continue
+
+            frames.append(_finalize_long(d))
+
+        if not frames:
+            raise KeyError(
+                "Nenhuma aba do Excel estava no formato esperado (Ano/Mes/Produto/Descricao/Orçado/Realizado)."
+            )
+        df = pd.concat(frames, ignore_index=True)
+        df.sort_values(["data", "produto_cod"], inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        return df
+
+    # CSV (normalizado)
+    try:
+        raw = pd.read_csv(bio, sep=None, engine="python", encoding="utf-8")
+    except Exception:
+        raw = pd.read_csv(bio, sep=None, engine="python", encoding="latin1")
+
+    raw = normalize_columns(raw)
+
+    _ensure_required(raw, ["ano", "mes", "produto_cod", "produto", "orcado"], label=filename or "upload")
+    return _finalize_long(raw)
 
 
 # ==========================
@@ -455,7 +520,6 @@ def make_evolucao_figure(df_view: pd.DataFrame, tipo: str, title: str, prod_labe
         xaxis=dict(**layout["xaxis"], title=""),
     )
     fig.update_layout(**layout)
-
     return fig
 
 
@@ -478,7 +542,6 @@ def top5_representatividade_rendas(df_base: pd.DataFrame) -> pd.DataFrame:
         .agg(valor=(metric, lambda s: float(np.nansum(s.values))))
     )
     g = g[g["valor"] > 0].sort_values("valor", ascending=False)
-
     if g.empty:
         return pd.DataFrame()
 
@@ -555,7 +618,6 @@ def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
 
     xmax = float(rep_plot["valor"].max()) if len(rep_plot) else 0
     fig.update_xaxes(range=[0, xmax * 1.18 if xmax > 0 else 1])
-
     return fig
 
 
@@ -563,13 +625,25 @@ def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
 # Sidebar: upload + filtros
 # ==========================
 st.sidebar.markdown("## Dados")
-uploaded = st.sidebar.file_uploader("Anexe o relatório (CSV exportado)", type=["csv"])
+uploaded = st.sidebar.file_uploader(
+    "Anexe o relatório (CSV normalizado ou Excel por abas)",
+    type=["csv", "xlsx", "xls"],
+)
 
-if uploaded is None:
-    st.sidebar.info("Envie o CSV do relatório para carregar os dados.")
+# Coloque este arquivo no seu repositório (para rodar sem upload)
+FALLBACK_DATA_PATH = "data/carteira_2020_2026_normalizada.csv"
+
+try:
+    if uploaded is None:
+        st.sidebar.info("Sem upload: usando base padrão do repositório.")
+        df = load_report_any(None, None, fallback_path=FALLBACK_DATA_PATH)
+    else:
+        df = load_report_any(uploaded.getvalue(), uploaded.name, fallback_path=FALLBACK_DATA_PATH)
+except Exception as e:
+    st.sidebar.error("Não consegui ler o arquivo. Veja o erro abaixo e ajuste o formato/colunas.")
+    st.exception(e)
     st.stop()
 
-df = load_report(uploaded.getvalue())
 
 produtos = (
     df[["produto_cod", "produto"]]
@@ -609,14 +683,12 @@ prod_sel = st.sidebar.multiselect("Produto (multi)", prod_labels, default=defaul
 # ==========================
 # Aplica filtros
 # ==========================
-# df_period: somente período (sem filtro de produto)
 df_period = df.copy()
 if periodo == "Ano":
     df_period = df_period[df_period["ano"] == ano_sel]
 elif periodo == "Mês":
     df_period = df_period[(df_period["ano"] == ano_sel) & (df_period["mes"] == mes_sel)]
 
-# df_view: período + produto
 df_view = df_period.copy()
 if prod_sel:
     cod_sel = [p.split(" - ")[0].strip() for p in prod_sel]
@@ -634,12 +706,15 @@ else:
 # ==========================
 # Header
 # ==========================
+min_year = int(df["ano"].min()) if not df.empty else 2020
+max_year = int(df["ano"].max()) if not df.empty else 2026
+
 st.markdown(
     f"""
 <div class="header-wrap">
   <div>
     <div class="header-title">Itacibá • Carteira de Crédito</div>
-    <div class="header-sub">Orçado x Realizado (2025) • Orçado (2026) • filtros por período e produto</div>
+    <div class="header-sub">Orçado x Realizado • {min_year} a {max_year} • filtros por período e produto</div>
   </div>
   <div class="legend-pill">
     <span><span class="dot" style="background:{BRAND["blue"]}"></span> Orçado</span>
@@ -749,7 +824,7 @@ def render_kpi(
 
     sub_html = ""
     if sub_label is not None:
-        if sub_value is None:
+        if sub_value is None or str(sub_value).strip() == "":
             sub_html = f'<div class="kpi-sub">{sub_label}</div>'
         else:
             sub_html = f'<div class="kpi-sub">{sub_label} <b>{sub_value}</b></div>'
@@ -760,13 +835,11 @@ def render_kpi(
       <div class="kpi-value">{value}</div>
       {badge_html}
       {sub_html}
-    
+    </div>
     """).strip()
 
     with col:
         st.markdown(html, unsafe_allow_html=True)
-
-
 
 
 c1, c2, c3, c4 = st.columns(4, gap="small")
@@ -806,8 +879,6 @@ render_kpi(
 )
 
 
-
-
 # ==========================
 # Charts
 # ==========================
@@ -841,7 +912,6 @@ st.markdown("</div>", unsafe_allow_html=True)
 # ==========================
 st.markdown('<div class="section-title">Representatividade • Produtos (Rendas)</div>', unsafe_allow_html=True)
 
-# representatividade ignora filtro de produto (usa df_period)
 rep = top5_representatividade_rendas(df_period)
 
 if rep.empty:
