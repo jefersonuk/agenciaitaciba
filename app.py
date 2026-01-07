@@ -102,7 +102,8 @@ section[data-testid="stSidebar"] {{
 }}
 
 .dot {{
-  width: 10px; height: 10px;
+  width: 10px;
+  height: 10px;
   border-radius: 999px;
   display:inline-block;
 }}
@@ -140,6 +141,11 @@ section[data-testid="stSidebar"] {{
   font-size: 12px;
   opacity: .68;
   margin-top: 6px;
+}}
+
+.kpi-sub b {{
+  opacity: .95;
+  font-weight: 900;
 }}
 
 .badge {{
@@ -280,9 +286,7 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
     bio = BytesIO(file_bytes)
     raw = pd.read_csv(bio, sep=None, engine="python", encoding="latin1")
 
-    # --------------------------
     # 2025
-    # --------------------------
     col_code_2025 = raw.columns[0]
     col_desc_2025 = raw.columns[1]
 
@@ -328,9 +332,7 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
 
     df_2025 = pd.DataFrame(recs)
 
-    # --------------------------
     # 2026
-    # --------------------------
     code_col_2026 = None
     desc_col_2026 = None
     for c in raw.columns:
@@ -685,7 +687,11 @@ saldo_real_last = value_at_month(saldo, saldo_last_dt, "realizado")
 saldo_orc_last = value_at_month(saldo, saldo_last_dt, "orcado")
 saldo_gap = saldo_real_last - saldo_orc_last
 
-saldo_ok = (not np.isnan(saldo_real_last)) and (not np.isnan(saldo_orc_last)) and (saldo_real_last >= saldo_orc_last)
+saldo_ok = (
+    (not np.isnan(saldo_real_last))
+    and (not np.isnan(saldo_orc_last))
+    and (saldo_real_last >= saldo_orc_last)
+)
 saldo_farol_txt = "Cumprido" if saldo_ok else "Não cumprido"
 saldo_farol_color = BRAND["ok"] if saldo_ok else BRAND["danger"]
 base_txt = month_label(saldo_last_dt)
@@ -721,7 +727,7 @@ rendas_farol_color = BRAND["ok"] if rendas_ok else BRAND["danger"]
 rendas_base_txt = month_label(rendas_last_dt) if rendas_last_dt is not None else "—"
 
 
-def render_kpi(col, title, value, badge_text=None, badge_color=None, sub=None):
+def render_kpi(col, title, value, badge_text=None, badge_color=None, sub_label=None, sub_value=None):
     badge_html = ""
     if badge_text:
         badge_html = f"""
@@ -731,9 +737,18 @@ def render_kpi(col, title, value, badge_text=None, badge_color=None, sub=None):
         </div>
         """
 
-    sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
+    sub_html = ""
+    if sub_label is not None or sub_value is not None:
+        # sem HTML vindo de variável “solta”; negrito vem do <b> controlado aqui
+        _label = (sub_label or "").strip()
+        _value = (sub_value or "").strip()
+        if _label and _value:
+            sub_html = f'<div class="kpi-sub">{_label} <b>{_value}</b></div>'
+        elif _label:
+            sub_html = f'<div class="kpi-sub">{_label}</div>'
+        else:
+            sub_html = f'<div class="kpi-sub"><b>{_value}</b></div>'
 
-    # Importante: tudo em UMA chamada (senão o card não engloba)
     html = f"""
     <div class="kpi-card">
       <div class="kpi-label">{title}</div>
@@ -752,31 +767,34 @@ render_kpi(
     c1,
     "Saldo • Realizado (último mês com dado)",
     fmt_br(saldo_real_last),
-    saldo_farol_txt,
-    saldo_farol_color,
-    sub=f"Base: <b>{base_txt}</b>",
+    badge_text=saldo_farol_txt,
+    badge_color=saldo_farol_color,
+    sub_label="Base:",
+    sub_value=base_txt,
 )
 
 render_kpi(
     c2,
     "Saldo • Gap vs Orçado (mesmo mês)",
     fmt_br(saldo_gap),
-    sub="Comparação no mês-base do realizado.",
+    sub_label="Comparação no mês-base do realizado.",
+    sub_value="",
 )
 
 render_kpi(
     c3,
     "Rendas • Orçado (acumulado no recorte)",
     fmt_br(rendas_orc),
-    sub=f"Base do farol: <b>{rendas_base_txt}</b>" if rendas_last_dt is not None else "Sem base de realizado ainda.",
+    sub_label="Base do farol:" if rendas_last_dt is not None else "Sem base de realizado ainda.",
+    sub_value=rendas_base_txt if rendas_last_dt is not None else "",
 )
 
 render_kpi(
     c4,
     "Rendas • Realizado (acumulado no recorte)",
     fmt_br(rendas_real),
-    rendas_farol_txt if rendas_last_dt is not None else None,
-    rendas_farol_color if rendas_last_dt is not None else None,
+    badge_text=rendas_farol_txt if rendas_last_dt is not None else None,
+    badge_color=rendas_farol_color if rendas_last_dt is not None else None,
 )
 
 st.markdown("<hr/>", unsafe_allow_html=True)
@@ -815,7 +833,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 # ==========================
 st.markdown('<div class="section-title">Representatividade • Produtos (Rendas)</div>', unsafe_allow_html=True)
 
-# Importante: representatividade ignora filtro de produto (usa df_period)
+# representatividade ignora filtro de produto (usa df_period)
 rep = top5_representatividade_rendas(df_period)
 
 if rep.empty:
