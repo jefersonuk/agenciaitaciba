@@ -729,9 +729,17 @@ rendas_base_txt = month_label(rendas_last_dt) if rendas_last_dt is not None else
 
 from textwrap import dedent
 
-def render_kpi(col, title, value, badge_text=None, badge_color=None, sub=None):
+def render_kpi(
+    col,
+    title,
+    value,
+    badge_text=None,
+    badge_color=None,
+    sub_label=None,
+    sub_value=None,
+):
     badge_html = ""
-    if badge_text:
+    if badge_text and badge_color:
         badge_html = dedent(f"""
         <div class="badge" style="color:{badge_color}">
           <span class="dot" style="background:{badge_color}"></span>
@@ -740,8 +748,11 @@ def render_kpi(col, title, value, badge_text=None, badge_color=None, sub=None):
         """).strip()
 
     sub_html = ""
-    if sub:
-        sub_html = f'<div class="kpi-sub">{sub}</div>'
+    if sub_label is not None:
+        if sub_value is None:
+            sub_html = f'<div class="kpi-sub">{sub_label}</div>'
+        else:
+            sub_html = f'<div class="kpi-sub">{sub_label} <b>{sub_value}</b></div>'
 
     html = dedent(f"""
     <div class="kpi-card">
@@ -754,6 +765,7 @@ def render_kpi(col, title, value, badge_text=None, badge_color=None, sub=None):
 
     with col:
         st.markdown(html, unsafe_allow_html=True)
+
 
 
 
