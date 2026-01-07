@@ -101,11 +101,11 @@ section[data-testid="stSidebar"] {{
   gap: 12px;
 }}
 
-.dot-badge{{
+.dot-badge{
   width: 10px; height: 10px;
   border-radius: 999px;
   display:inline-block;
-}}
+}
 
 
 .section-title {{
@@ -723,14 +723,13 @@ rendas_base_txt = month_label(rendas_last_dt) if rendas_last_dt is not None else
 
 
 def render_kpi(col, title, value, badge_text=None, badge_color=None, sub=None):
-    badge_html = ""
-    if badge_text:
-        badge_html = f"""
-        <div class="badge" style="color:{badge_color}">
-          <span class="dot-badge" style="background:{badge_color}"></span>
-          <span>{badge_text}</span>
-        </div>
-        """
+   badge_html = f"""
+<div class="badge" style="color:{badge_color}">
+  <span class="dot-badge" style="background:{badge_color}"></span>
+  <span>{badge_text}</span>
+</div>
+"""
+
 
     sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
 
@@ -745,7 +744,6 @@ def render_kpi(col, title, value, badge_text=None, badge_color=None, sub=None):
 
     with col:
         st.markdown(html, unsafe_allow_html=True)
-
 
 
 
