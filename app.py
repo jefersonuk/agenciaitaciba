@@ -278,111 +278,134 @@ def make_plotly_layout_base():
 
 
 # ==========================
-# Parser do CSV matricial (2025 + 2026)
+# Parser do CSV matricial (2020 a 2026)
 # ==========================
 @st.cache_data(show_spinner=False)
 def load_report(file_bytes: bytes) -> pd.DataFrame:
     from io import BytesIO
-    bio = BytesIO(file_bytes)
-    raw = pd.read_csv(bio, sep=None, engine="python", encoding="latin1")
 
-    # 2025
-    col_code_2025 = raw.columns[0]
-    col_desc_2025 = raw.columns[1]
+    raw = pd.read_csv(BytesIO(file_bytes), sep=None, engine="python", encoding="latin1")
+    first_col = raw.columns[0]
 
-    month_start_cols = []
-    for c in raw.columns[2:50]:
-        if str(raw.loc[0, c]) in PT_MONTH.keys():
-            month_start_cols.append(c)
+    # Blocos do relatório começam em "Filtro selecionado" (um por ano)
+    starts = raw.index[raw[first_col].astype(str).str.strip().eq("Filtro selecionado")].tolist()
+    if not starts:
+        raise ValueError("Não encontrei blocos do relatório (linha 'Filtro selecionado').")
 
-    blocks_2025 = []
-    for start in month_start_cols:
-        idx = raw.columns.get_loc(start)
-        block_cols = raw.columns[idx:idx + 4]
-        mon = str(raw.loc[0, start]).strip()
-        blocks_2025.append((mon, block_cols.tolist()))
-
-    data_rows_2025 = raw.iloc[2:64].copy()
-
+    starts = starts + [len(raw)]  # sentinela
     recs = []
-    for _, r in data_rows_2025.iterrows():
-        code = str(r[col_code_2025]).strip()
-        if code.lower() == "nan" or code == "" or code == "None":
+
+    cols_all = list(raw.columns)
+
+    for bi in range(len(starts) - 1):
+        s, e = starts[bi], starts[bi + 1]
+        blk = raw.iloc[s:e]
+
+        # Ano do bloco
+        year = None
+        yr_rows = blk.index[blk[first_col].astype(str).str.strip().eq("Ano referência")].tolist()
+        if yr_rows:
+            vals = blk.loc[yr_rows[0]].values
+            for v in vals:
+                vv = str(v).strip()
+                if re.fullmatch(r"\d{4}", vv):
+                    year = int(vv)
+                    break
+        if year is None:
             continue
-        desc = str(r[col_desc_2025]).strip()
-        desc = re.sub(r"\s+", " ", desc).strip()
 
-        for mon, cols in blocks_2025:
-            orc = parse_ptbr_number(r[cols[0]])
-            rea = parse_ptbr_number(r[cols[1]])
-            dt_ = datetime(2025, PT_MONTH[mon], 1)
+        # Linha de cabeçalho "Cód"
+        cod_rows = blk.index[blk[first_col].astype(str).str.strip().eq("Cód")].tolist()
+        if not cod_rows:
+            continue
+        idx_cod = cod_rows[0]
 
-            recs.append(
-                {
-                    "data": pd.to_datetime(dt_),
-                    "ano": 2025,
-                    "mes": PT_MONTH[mon],
-                    "produto_cod": code,
-                    "produto": desc,
-                    "tipo": type_from_code(code),
-                    "orcado": orc,
-                    "realizado": rea,
-                }
-            )
+        # Detecta se o bloco é estilo 2026 (só meses em colunas) ou estilo 2020-2025 (Orçado/Realizado por mês)
+        row_cod = blk.loc[idx_cod]
+        months_in_cod = [(col, str(row_cod[col]).strip()) for col in blk.columns if str(row_cod[col]).strip() in PT_MONTH]
 
-    df_2025 = pd.DataFrame(recs)
+        # --- Caso A: 2026 (ou qualquer ano com "Cód | Descrição | Jan | Fev | ...")
+        if len(months_in_cod) >= 10:
+            desc_col = blk.columns[1] if len(blk.columns) > 1 else None
+            month_cols = sorted([(lab, col) for col, lab in months_in_cod], key=lambda x: PT_MONTH[x[0]])
 
-    # 2026
-    code_col_2026 = None
-    desc_col_2026 = None
-    for c in raw.columns:
-        if str(raw.loc[0, c]).strip() == "Cód":
-            code_col_2026 = c
-            idx = raw.columns.get_loc(c)
-            if idx + 1 < len(raw.columns):
-                desc_col_2026 = raw.columns[idx + 1]
-            break
+            for ridx in blk.index[blk.index > idx_cod]:
+                code_raw = str(blk.loc[ridx, first_col]).strip()
+                code = re.sub(r"\D", "", code_raw)
+                if code == "":
+                    continue
 
-    if code_col_2026 is not None and desc_col_2026 is not None:
-        idx_code = raw.columns.get_loc(code_col_2026)
-        month_cols_2026 = []
-        for c in raw.columns[idx_code + 3:]:
-            lab = str(raw.loc[0, c]).strip()
-            if lab in PT_MONTH:
-                month_cols_2026.append((lab, c))
+                desc = str(blk.loc[ridx, desc_col]).strip() if desc_col else ""
+                desc = re.sub(r"\s+", " ", desc).strip()
 
-        data_rows_2026 = raw.iloc[1:64].copy()
+                for mon_label, col in month_cols:
+                    orc = parse_ptbr_number(blk.loc[ridx, col])
+                    dt_ = datetime(year, PT_MONTH[mon_label], 1)
+                    recs.append(
+                        {
+                            "data": pd.to_datetime(dt_),
+                            "ano": year,
+                            "mes": PT_MONTH[mon_label],
+                            "produto_cod": code,
+                            "produto": desc,
+                            "tipo": type_from_code(code),
+                            "orcado": orc,
+                            "realizado": np.nan,
+                        }
+                    )
 
-        recs2 = []
-        for _, r in data_rows_2026.iterrows():
-            code = str(r[code_col_2026]).strip()
-            if code.lower() == "nan" or code == "" or code == "None":
-                continue
-            desc = str(r[desc_col_2026]).strip()
-            desc = re.sub(r"\s+", " ", desc).strip()
+        # --- Caso B: 2020-2025 (linha anterior tem Jan/Fev/... e cada mês tem 4 colunas: Orçado/Realizado/Var/Var%)
+        else:
+            idx_month = idx_cod - 1
+            row_month = blk.loc[idx_month]
 
-            for mon, c in month_cols_2026:
-                orc = parse_ptbr_number(r[c])
-                dt_ = datetime(2026, PT_MONTH[mon], 1)
-                recs2.append(
-                    {
-                        "data": pd.to_datetime(dt_),
-                        "ano": 2026,
-                        "mes": PT_MONTH[mon],
-                        "produto_cod": code,
-                        "produto": desc,
-                        "tipo": type_from_code(code),
-                        "orcado": orc,
-                        "realizado": np.nan,
-                    }
-                )
+            month_start_cols = []
+            for c in blk.columns:
+                lab = str(row_month[c]).strip()
+                if lab in PT_MONTH:
+                    month_start_cols.append(c)
 
-        df_2026 = pd.DataFrame(recs2)
-    else:
-        df_2026 = pd.DataFrame(columns=df_2025.columns)
+            blocks = []
+            blk_cols = list(blk.columns)
+            for c in month_start_cols:
+                j = blk_cols.index(c)
+                block_cols = blk_cols[j : j + 4]  # Orçado, Realizado, Var (R$), Var (%)
+                mon = str(row_month[c]).strip()
+                if len(block_cols) >= 2:
+                    blocks.append((mon, block_cols))
 
-    df = pd.concat([df_2025, df_2026], ignore_index=True)
+            desc_col = blk.columns[1]
 
+            for ridx in blk.index[blk.index > idx_cod]:
+                code_raw = str(blk.loc[ridx, first_col]).strip()
+                code = re.sub(r"\D", "", code_raw)
+                if code == "":
+                    continue
+
+                desc = str(blk.loc[ridx, desc_col]).strip()
+                desc = re.sub(r"\s+", " ", desc).strip()
+
+                for mon, cols in blocks:
+                    orc = parse_ptbr_number(blk.loc[ridx, cols[0]])
+                    rea = parse_ptbr_number(blk.loc[ridx, cols[1]])
+                    dt_ = datetime(year, PT_MONTH[mon], 1)
+
+                    recs.append(
+                        {
+                            "data": pd.to_datetime(dt_),
+                            "ano": year,
+                            "mes": PT_MONTH[mon],
+                            "produto_cod": code,
+                            "produto": desc,
+                            "tipo": type_from_code(code),
+                            "orcado": orc,
+                            "realizado": rea,
+                        }
+                    )
+
+    df = pd.DataFrame(recs)
+
+    # Normalização final (mantém seu contrato atual)
     df["produto_cod"] = df["produto_cod"].astype(str)
     df["produto"] = df["produto"].astype(str)
     df["tipo"] = df["tipo"].astype(str)
