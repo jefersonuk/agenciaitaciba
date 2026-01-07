@@ -1,386 +1,711 @@
-import streamlit as st
-import pandas as pd
+# app.py
+# Banestes • Itacibá — Carteira de Crédito (Dashboard Interativo)
+# Streamlit + Plotly (dark premium)
+
+import re
 import numpy as np
-import plotly.express as px
+import pandas as pd
+import streamlit as st
 import plotly.graph_objects as go
-from datetime import datetime
+import plotly.express as px
 
-# -----------------------------
-# Visual system (cores + tema)
-# -----------------------------
-COLOR_SEQ = ["#56B4E9", "#009E73", "#E69F00", "#0072B2", "#D55E00", "#CC79A7", "#F0E442"]
-
-PLOTLY_TEMPLATE_LIGHT = "simple_white"
-PLOTLY_TEMPLATE_DARK = "plotly_dark"
+# ==========================================================
+# Brand tokens (Banestes)
+# ==========================================================
+BRAND = {
+    "blue": "#1E0AE8",
+    "green": "#00AB16",
+    "red": "#FF4D6D",
+    "ink": "#F2F6FF",
+    "muted": "#B8C6E6",
+    "bg": "#0A1020",
+    "card": "#0F1830",
+    "border": "rgba(242, 246, 255, 0.12)",
+    "grid": "rgba(242, 246, 255, 0.08)",
+}
 
 st.set_page_config(
-    page_title="Dashboard Interativo (SOTA)",
+    page_title="Banestes | Itacibá — Carteira de Crédito",
     page_icon="📊",
     layout="wide",
 )
 
-# -----------------------------
+# ==========================================================
+# CSS
+# ==========================================================
+def inject_css() -> None:
+    st.markdown(
+        f"""
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap');
+
+          :root {{
+            --b-blue: {BRAND["blue"]};
+            --b-green: {BRAND["green"]};
+            --b-red: {BRAND["red"]};
+            --b-ink: {BRAND["ink"]};
+            --b-muted: {BRAND["muted"]};
+            --b-bg: {BRAND["bg"]};
+            --b-card: {BRAND["card"]};
+            --b-border: {BRAND["border"]};
+            --b-grid: {BRAND["grid"]};
+          }}
+
+          html, body, [class*="css"] {{
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+            color: var(--b-ink);
+          }}
+
+          #MainMenu {{ visibility: hidden; }}
+          footer {{ visibility: hidden; }}
+          header {{ visibility: hidden; }}
+
+          .stApp {{ background: var(--b-bg); }}
+
+          section[data-testid="stSidebar"] {{
+            background: var(--b-card);
+            border-right: 1px solid var(--b-border);
+          }}
+
+          .topbar {{
+            display:flex; align-items:center; justify-content:space-between; gap:16px;
+            padding:16px 18px; background: var(--b-card);
+            border: 1px solid var(--b-border); border-radius: 22px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+            margin-bottom: 14px;
+          }}
+          .title {{
+            font-family: Poppins, Inter, sans-serif;
+            font-weight: 800; letter-spacing: -0.02em;
+            font-size: 20px; margin:0; line-height:1.1;
+            color: rgba(242,246,255,0.98);
+          }}
+          .subtitle {{
+            margin:4px 0 0 0; color: rgba(242,246,255,0.70); font-size: 13px;
+          }}
+
+          .section-title {{
+            font-family: Poppins, Inter, sans-serif;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin: 18px 0 10px 0;
+            color: rgba(242,246,255,0.96);
+          }}
+
+          .kpi-card-native {{
+            background: var(--b-card);
+            border: 1px solid var(--b-border);
+            border-radius: 22px;
+            padding: 16px 16px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.30);
+          }}
+          .kpi-label {{
+            color: rgba(242,246,255,0.72);
+            font-size: 12px;
+            margin-bottom: 6px;
+          }}
+          .kpi-value {{
+            font-family: Poppins, Inter, sans-serif;
+            font-weight: 800;
+            font-size: 26px;
+            letter-spacing: -0.02em;
+            margin: 0;
+            line-height: 1.05;
+            color: rgba(242,246,255,0.98);
+          }}
+          .kpi-sub {{
+            margin-top: 8px;
+            color: rgba(242,246,255,0.70);
+            font-size: 12px;
+          }}
+
+          .pill {{
+            display:inline-flex; align-items:center; gap:8px;
+            padding: 6px 12px; border-radius: 999px;
+            border: 1px solid var(--b-border);
+            background: rgba(30, 10, 232, 0.10);
+            font-size: 12px;
+            color: rgba(242,246,255,0.92);
+          }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ==========================================================
+# Plotly template
+# ==========================================================
+def make_plotly_template() -> go.layout.Template:
+    t = go.layout.Template()
+    t.layout = go.Layout(
+        paper_bgcolor=BRAND["bg"],
+        plot_bgcolor=BRAND["card"],
+        font=dict(family="Inter, system-ui, sans-serif", color=BRAND["ink"], size=13),
+        xaxis=dict(
+            gridcolor=BRAND["grid"],
+            zeroline=False,
+            showline=False,
+            ticks="outside",
+            tickcolor="rgba(0,0,0,0)",
+            tickfont=dict(color=BRAND["muted"]),
+            title=dict(text="", font=dict(color=BRAND["muted"])),
+        ),
+        yaxis=dict(
+            gridcolor=BRAND["grid"],
+            zeroline=False,
+            showline=False,
+            ticks="outside",
+            tickcolor="rgba(0,0,0,0)",
+            tickfont=dict(color=BRAND["muted"]),
+            title=dict(text="", font=dict(color=BRAND["muted"])),
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+            font=dict(color=BRAND["muted"]),
+        ),
+        margin=dict(l=14, r=14, t=48, b=14),
+    )
+    return t
+
+# ==========================================================
 # Helpers
-# -----------------------------
-def _guess_datetime_cols(df: pd.DataFrame) -> list[str]:
-    candidates = []
-    for c in df.columns:
-        if df[c].dtype == "datetime64[ns]":
-            candidates.append(c)
-            continue
-        if df[c].dtype == "object":
-            # tentativa rápida de parse (amostra)
-            sample = df[c].dropna().astype(str).head(50)
-            if sample.empty:
-                continue
-            parsed = pd.to_datetime(sample, errors="coerce", dayfirst=True)
-            if parsed.notna().mean() > 0.7:
-                candidates.append(c)
-    return candidates
+# ==========================================================
+def fmt_br(x: float) -> str:
+    if x is None or (isinstance(x, float) and np.isnan(x)):
+        return "—"
+    s = f"{x:,.2f}"
+    return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
-def _coerce_datetime(df: pd.DataFrame, col: str) -> pd.DataFrame:
-    out = df.copy()
-    out[col] = pd.to_datetime(out[col], errors="coerce", dayfirst=True)
-    return out
+def br_to_float(x) -> float:
+    if x is None or (isinstance(x, float) and np.isnan(x)):
+        return np.nan
+    s = str(x).strip()
+    if s == "" or s.lower() == "nan":
+        return np.nan
+    neg = False
+    if s.startswith("(") and s.endswith(")"):
+        neg = True
+        s = s[1:-1]
+    s = s.replace("\xa0", "").replace(" ", "")
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        v = float(s)
+    except Exception:
+        return np.nan
+    return -v if neg else v
 
-def _numeric_cols(df: pd.DataFrame) -> list[str]:
-    return [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+def kpi_status(real: float, plan: float, eps: float = 1e-9):
+    if real is None or plan is None:
+        return ("Sem dado", "rgba(242,246,255,0.55)")
+    if (isinstance(real, float) and np.isnan(real)) or (isinstance(plan, float) and np.isnan(plan)):
+        return ("Sem dado", "rgba(242,246,255,0.55)")
+    return ("Cumprido", BRAND["green"]) if (real + eps) >= plan else ("Não cumprido", BRAND["red"])
 
-def _categorical_cols(df: pd.DataFrame) -> list[str]:
-    cats = []
-    for c in df.columns:
-        if pd.api.types.is_bool_dtype(df[c]):
-            cats.append(c)
-        elif pd.api.types.is_object_dtype(df[c]) or pd.api.types.is_categorical_dtype(df[c]):
-            cats.append(c)
-    return cats
+def badge_html(text: str, color: str) -> str:
+    return f"""
+    <span style="
+      display:inline-flex; align-items:center; gap:6px;
+      padding:5px 10px; border-radius:999px;
+      border:1px solid {BRAND['border']};
+      background: rgba(255,255,255,0.06);
+      color:{color}; font-weight:800; font-size:12px;">
+      ● {text}
+    </span>
+    """
 
+MONTH_MAP = {
+    "Jan": 1, "Fev": 2, "Mar": 3, "Abr": 4, "Mai": 5, "Jun": 6,
+    "Jul": 7, "Ago": 8, "Set": 9, "Out": 10, "Nov": 11, "Dez": 12
+}
+
+# ==========================================================
+# Parser do CSV (padrão do export atual)
+# ==========================================================
 @st.cache_data(show_spinner=False)
-def load_data(uploaded_file) -> pd.DataFrame:
-    name = uploaded_file.name.lower()
-    if name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    elif name.endswith(".xlsx") or name.endswith(".xls"):
-        df = pd.read_excel(uploaded_file)
-    else:
-        raise ValueError("Formato não suportado. Use CSV ou Excel.")
-    # limpa colunas
-    df.columns = [str(c).strip() for c in df.columns]
-    return df
+def parse_relatorio(uploaded_file) -> pd.DataFrame:
+    raw = pd.read_csv(uploaded_file, sep=None, engine="python", encoding="latin1")
+    cols = list(raw.columns)
 
-def kpi_row(df: pd.DataFrame, metric_col: str):
-    total = df[metric_col].sum(skipna=True)
-    avg = df[metric_col].mean(skipna=True)
-    med = df[metric_col].median(skipna=True)
-    cnt = df[metric_col].notna().sum()
+    code_2025 = "2025"
+    desc_2025 = "Unnamed: 1"
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total", f"{total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    c2.metric("Média", f"{avg:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    c3.metric("Mediana", f"{med:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    c4.metric("N (válidos)", f"{cnt:,}".replace(",", "."))
+    blocks_2025 = []
+    for start in range(2, min(60, len(cols)), 4):
+        try:
+            mlabel = raw.iloc[0, start]
+        except Exception:
+            continue
+        if pd.isna(mlabel):
+            continue
+        mlabel = str(mlabel).strip()
+        if mlabel in MONTH_MAP and (start + 1) < len(cols):
+            blocks_2025.append((MONTH_MAP[mlabel], cols[start], cols[start + 1]))
 
-def plot_timeseries(df: pd.DataFrame, date_col: str, metric_col: str, agg: str, template: str):
-    if date_col not in df.columns:
-        return None
+    code_2026 = "Unnamed: 50"
+    desc_2026 = "Unnamed: 51"
 
-    dff = df.dropna(subset=[date_col]).copy()
-    if dff.empty:
-        return None
+    blocks_2026 = []
+    for idx in range(53, 90):
+        colname = f"Unnamed: {idx}"
+        if colname not in raw.columns:
+            continue
+        mlabel = raw.iloc[0, raw.columns.get_loc(colname)]
+        if pd.isna(mlabel):
+            continue
+        mlabel = str(mlabel).strip()
+        if mlabel in MONTH_MAP:
+            blocks_2026.append((MONTH_MAP[mlabel], colname))
 
-    # granularidade diária (pode ajustar depois)
-    dff["__date"] = pd.to_datetime(dff[date_col]).dt.date
-    if agg == "Soma":
-        g = dff.groupby("__date", as_index=False)[metric_col].sum()
-        ytitle = f"{metric_col} (soma)"
-    else:
-        g = dff.groupby("__date", as_index=False)[metric_col].mean()
-        ytitle = f"{metric_col} (média)"
+    records = []
 
-    fig = px.line(
-        g,
-        x="__date",
-        y=metric_col,
-        markers=False,
-        template=template,
-        title="Tendência no tempo",
-        color_discrete_sequence=COLOR_SEQ,
+    # 2025
+    if code_2025 in raw.columns:
+        for i in range(2, len(raw)):
+            code = raw.at[i, code_2025]
+            if pd.isna(code):
+                continue
+            code_str = str(code).strip()
+            if not code_str.isdigit():
+                continue
+
+            desc = raw.at[i, desc_2025] if desc_2025 in raw.columns else ""
+            desc_str = re.sub(r"^\s*\d+\s*-\s*", "", str(desc).replace("\xa0", " ")).strip()
+            desc_str = re.sub(r"\s+", " ", desc_str)
+
+            tipo = "Saldo" if code_str.startswith("18201") else ("Rendas" if code_str.startswith("18202") else None)
+            if tipo is None:
+                continue
+
+            for m, c_orc, c_real in blocks_2025:
+                records.append({
+                    "tipo": tipo,
+                    "data": pd.Timestamp(2025, m, 1),
+                    "ano": 2025,
+                    "mes": m,
+                    "produto_cod": code_str,
+                    "produto_desc": desc_str,
+                    "orcado": br_to_float(raw.at[i, c_orc]),
+                    "realizado": br_to_float(raw.at[i, c_real]),
+                })
+
+    # 2026 (orçado)
+    if code_2026 in raw.columns:
+        for i in range(1, len(raw)):
+            code = raw.at[i, code_2026]
+            if pd.isna(code):
+                continue
+            code_str = str(code).strip()
+            if not code_str.isdigit():
+                continue
+
+            desc = raw.at[i, desc_2026] if desc_2026 in raw.columns else ""
+            desc_str = re.sub(r"^\s*\d+\s*-\s*", "", str(desc).replace("\xa0", " ")).strip()
+            desc_str = re.sub(r"\s+", " ", desc_str)
+
+            tipo = "Saldo" if code_str.startswith("18201") else ("Rendas" if code_str.startswith("18202") else None)
+            if tipo is None:
+                continue
+
+            for m, colname in blocks_2026:
+                records.append({
+                    "tipo": tipo,
+                    "data": pd.Timestamp(2026, m, 1),
+                    "ano": 2026,
+                    "mes": m,
+                    "produto_cod": code_str,
+                    "produto_desc": desc_str,
+                    "orcado": br_to_float(raw.at[i, colname]),
+                    "realizado": np.nan,
+                })
+
+    tidy = pd.DataFrame.from_records(records)
+    if tidy.empty:
+        return tidy
+
+    tidy["produto"] = tidy["produto_cod"] + " - " + tidy["produto_desc"]
+    return tidy
+
+# ==========================================================
+# Regras de filtro de produto (anti-dupla contagem)
+# ==========================================================
+def safe_drop_totals(selected_codes: set[str]) -> tuple[set[str], list[str]]:
+    warnings = []
+    out = set(selected_codes)
+    for total in ["18201", "18202"]:
+        has_total = total in out
+        has_children = any((c != total and c.startswith(total)) for c in out)
+        if has_total and has_children:
+            out.remove(total)
+            warnings.append(f"Removi automaticamente o TOTAL {total} para evitar dupla contagem (subprodutos também selecionados).")
+    return out, warnings
+
+def selected_products_label(products_df: pd.DataFrame, selected_codes: set[str], max_items: int = 2) -> str:
+    if not selected_codes:
+        return "Todos os produtos"
+    mp = dict(zip(products_df["produto_cod"], products_df["produto"]))
+    names = [mp.get(c, c) for c in sorted(selected_codes)]
+    if len(names) <= max_items:
+        return " • ".join(names)
+    return " • ".join(names[:max_items]) + f"  +{len(names) - max_items} outros"
+
+# ==========================================================
+# Série e gráficos
+# ==========================================================
+def series_for(dff: pd.DataFrame, tipo: str) -> pd.DataFrame:
+    x = dff[dff["tipo"] == tipo].copy()
+    if x.empty:
+        return x
+    g = x.groupby("data", as_index=False).agg(
+        orcado=("orcado", "sum"),
+        realizado=("realizado", lambda s: s.sum(min_count=1)),  # mantém NaN se não existir dado
     )
+    return g.sort_values("data")
+
+def bar_line_figure(df_series: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Bar(
+            x=df_series["data"],
+            y=df_series["orcado"],
+            name="Orçado",
+            marker=dict(color=BRAND["blue"], line=dict(width=0)),
+            opacity=0.72,
+            hovertemplate="<b>%{x|%b/%Y}</b><br>Orçado: %{y:,.2f}<extra></extra>",
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=df_series["data"],
+            y=df_series["realizado"],
+            name="Realizado",
+            mode="lines+markers",
+            line=dict(color=BRAND["green"], width=3),
+            marker=dict(size=7),
+            connectgaps=False,
+            hovertemplate="<b>%{x|%b/%Y}</b><br>Realizado: %{y:,.2f}<extra></extra>",
+        )
+    )
+
     fig.update_layout(
-        height=360,
-        margin=dict(l=10, r=10, t=60, b=10),
-        xaxis_title="Data",
-        yaxis_title=ytitle,
+        height=520,
+        barmode="overlay",
+        bargap=0.28,
+        legend_title_text="",
+        hovermode="x unified",
+        paper_bgcolor=BRAND["bg"],
+        plot_bgcolor=BRAND["card"],
+        hoverlabel=dict(
+            bgcolor="rgba(15,24,48,0.94)",
+            bordercolor="rgba(242,246,255,0.15)",
+            font=dict(color=BRAND["ink"]),
+        ),
+    )
+
+    fig.update_xaxes(
+        tickformat="%b\n%Y",
+        showgrid=False,
+        tickfont=dict(color=BRAND["muted"]),
+    )
+    fig.update_yaxes(
+        gridcolor=BRAND["grid"],
+        tickfont=dict(color=BRAND["muted"]),
+        separatethousands=True,
+    )
+    return fig
+
+def last_real_date_with_data(dff: pd.DataFrame, tipo: str, col: str, eps: float = 0.0001):
+    x = dff[dff["tipo"] == tipo][["data", col]].copy()
+    x = x.dropna()
+    x = x[x[col].abs() > eps]
+    if x.empty:
+        return None
+    return pd.to_datetime(x["data"]).max()
+
+def sum_at_date(dff: pd.DataFrame, tipo: str, col: str, dt: pd.Timestamp) -> float:
+    x = dff[(dff["tipo"] == tipo) & (dff["data"] == dt)][col]
+    if col == "realizado":
+        return float(x.sum(min_count=1))
+    return float(x.sum(skipna=True))
+
+# ==========================================================
+# Representatividade (Top 5 + Outros) - Rendas
+# ==========================================================
+def top5_representatividade_rendas(df_time: pd.DataFrame) -> pd.DataFrame:
+    x = df_time[df_time["tipo"] == "Rendas"].copy()
+    if x.empty:
+        return pd.DataFrame()
+
+    x = x[x["produto_cod"].astype(str).str.startswith("18202")]
+    x = x[x["produto_cod"].astype(str) != "18202"]  # exclui TOTAL
+
+    if x.empty:
+        return pd.DataFrame()
+
+    has_real = x["realizado"].notna().any() and (not np.isnan(float(x["realizado"].sum(min_count=1))))
+    metric = "realizado" if has_real else "orcado"
+
+    g = (
+        x.groupby(["produto_cod", "produto"], as_index=False)
+         .agg(valor=(metric, lambda s: s.sum(min_count=1)))
+    )
+    g = g.dropna()
+    g = g[g["valor"] > 0]
+    if g.empty:
+        return pd.DataFrame()
+
+    g = g.sort_values("valor", ascending=False)
+
+    top5 = g.head(5).copy()
+    rest = float(g.iloc[5:]["valor"].sum()) if len(g) > 5 else 0.0
+
+    if rest > 0:
+        top5 = pd.concat(
+            [top5, pd.DataFrame([{"produto_cod": "OUTROS", "produto": "Outros", "valor": rest}])],
+            ignore_index=True,
+        )
+
+    total = float(top5["valor"].sum())
+    top5["share"] = top5["valor"] / total if total > 0 else 0.0
+    top5["metric"] = metric
+    return top5
+
+def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
+    metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
+
+    rep_plot = rep.sort_values("valor", ascending=True).copy()
+    perc = (rep_plot["share"] * 100).round(1).astype(str) + "%"
+
+    grad = ["#2B59FF", "#3550FF", "#3D47FF", "#453DFF", "#4D33FF", "#5B2BD6"]
+    colors = []
+    idx = 0
+    for p in rep_plot["produto"].tolist():
+        if p == "Outros":
+            colors.append("rgba(242,246,255,0.22)")
+        else:
+            colors.append(grad[min(idx, len(grad) - 1)])
+            idx += 1
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            y=rep_plot["produto"],
+            x=rep_plot["valor"],
+            orientation="h",
+            marker=dict(color=colors, line=dict(width=0)),
+            text=perc,
+            textposition="outside",
+            textfont=dict(color=BRAND["muted"], size=12),
+            hovertemplate="<b>%{y}</b><br>"
+                          f"Rendas ({metric_lbl}): " + "%{x:,.2f}<br>"
+                          "Share: %{text}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        height=380,
+        paper_bgcolor=BRAND["bg"],
+        plot_bgcolor=BRAND["card"],
+        margin=dict(l=14, r=14, t=12, b=14),
+        xaxis=dict(
+            gridcolor="rgba(242,246,255,0.05)",
+            tickfont=dict(color=BRAND["muted"]),
+            zeroline=False,
+        ),
+        yaxis=dict(
+            tickfont=dict(color=BRAND["ink"]),
+        ),
         showlegend=False,
     )
-    fig.update_traces(hovertemplate="<b>%{x}</b><br>" + ytitle + ": %{y:,.2f}<extra></extra>")
+
+    fig.update_xaxes(range=[0, rep_plot["valor"].max() * 1.12])
     return fig
 
-def plot_category_rank(df: pd.DataFrame, cat_col: str, metric_col: str, agg: str, top_n: int, template: str):
-    if cat_col not in df.columns:
-        return None
-    dff = df.dropna(subset=[cat_col]).copy()
-    if dff.empty:
-        return None
+# ==========================================================
+# App
+# ==========================================================
+inject_css()
+px.defaults.template = make_plotly_template()
 
-    if agg == "Soma":
-        g = dff.groupby(cat_col, as_index=False)[metric_col].sum()
-        title = f"Top {top_n} por {cat_col} (soma de {metric_col})"
-        val = "sum"
-    else:
-        g = dff.groupby(cat_col, as_index=False)[metric_col].mean()
-        title = f"Top {top_n} por {cat_col} (média de {metric_col})"
-        val = "mean"
-
-    g = g.sort_values(metric_col, ascending=False).head(top_n)
-
-    fig = px.bar(
-        g,
-        x=metric_col,
-        y=cat_col,
-        orientation="h",
-        template=template,
-        title=title,
-        color=metric_col,
-        color_continuous_scale="Viridis",
-    )
-    fig.update_layout(
-        height=360,
-        margin=dict(l=10, r=10, t=60, b=10),
-        xaxis_title=None,
-        yaxis_title=None,
-        coloraxis_showscale=False,
-    )
-    fig.update_traces(hovertemplate=f"<b>%{{y}}</b><br>{metric_col}: %{{x:,.2f}}<extra></extra>")
-    return fig
-
-def plot_distribution(df: pd.DataFrame, metric_col: str, template: str):
-    dff = df[metric_col].dropna()
-    if dff.empty:
-        return None
-
-    fig = px.histogram(
-        dff,
-        x=metric_col,
-        nbins=40,
-        template=template,
-        title="Distribuição (histograma)",
-        color_discrete_sequence=COLOR_SEQ,
-    )
-    fig.update_layout(
-        height=360,
-        margin=dict(l=10, r=10, t=60, b=10),
-        xaxis_title=metric_col,
-        yaxis_title="Contagem",
-        showlegend=False,
-    )
-    fig.update_traces(hovertemplate=f"{metric_col}: %{{x:,.2f}}<br>Contagem: %{{y}}<extra></extra>")
-    return fig
-
-def plot_corr(df: pd.DataFrame, template: str):
-    num = df.select_dtypes(include=[np.number]).dropna(axis=1, how="all")
-    if num.shape[1] < 3:
-        return None
-
-    corr = num.corr(numeric_only=True)
-    fig = px.imshow(
-        corr,
-        text_auto=False,
-        aspect="auto",
-        template=template,
-        title="Correlação (numéricos)",
-        color_continuous_scale="RdBu",
-        zmin=-1, zmax=1,
-    )
-    fig.update_layout(
-        height=420,
-        margin=dict(l=10, r=10, t=60, b=10),
-        coloraxis_showscale=True,
-    )
-    return fig
-
-def quick_story(df: pd.DataFrame, metric_col: str, date_col: str | None, cat_col: str | None, agg: str):
-    bullets = []
-
-    # 1) maior contribuição por categoria
-    if cat_col and cat_col in df.columns:
-        dff = df.dropna(subset=[cat_col]).copy()
-        if not dff.empty:
-            if agg == "Soma":
-                g = dff.groupby(cat_col)[metric_col].sum().sort_values(ascending=False)
-                label = "contribuição (soma)"
-            else:
-                g = dff.groupby(cat_col)[metric_col].mean().sort_values(ascending=False)
-                label = "performance (média)"
-
-            if len(g) > 0:
-                top = g.index[0]
-                bullets.append(f"• **{top}** lidera em **{label}** para **{metric_col}**.")
-
-    # 2) tendência recente (últimos 14 pontos)
-    if date_col and date_col in df.columns:
-        dff = df.dropna(subset=[date_col]).copy()
-        if not dff.empty:
-            dff["__date"] = pd.to_datetime(dff[date_col]).dt.date
-            if agg == "Soma":
-                g = dff.groupby("__date", as_index=False)[metric_col].sum()
-            else:
-                g = dff.groupby("__date", as_index=False)[metric_col].mean()
-
-            g = g.sort_values("__date")
-            if len(g) >= 8:
-                tail = g.tail(14)
-                first, last = tail[metric_col].iloc[0], tail[metric_col].iloc[-1]
-                if pd.notna(first) and first != 0:
-                    delta = (last - first) / abs(first)
-                    direction = "alta" if delta > 0 else "queda"
-                    bullets.append(f"• Nos últimos pontos de tempo, houve **{direction}** de **{delta:.1%}** em **{metric_col}**.")
-
-    # 3) outlier simples
-    s = df[metric_col].dropna()
-    if len(s) > 20:
-        q1, q3 = s.quantile(0.25), s.quantile(0.75)
-        iqr = q3 - q1
-        outliers = s[(s < q1 - 1.5 * iqr) | (s > q3 + 1.5 * iqr)]
-        if len(outliers) > 0:
-            bullets.append(f"• Há **{len(outliers)}** possíveis outliers (IQR). Vale checar causas e qualidade do dado.")
-
-    if not bullets:
-        bullets = ["• Ajuste filtros/métrica para gerar uma narrativa mais forte."]
-
-    return bullets
-
-# -----------------------------
-# UI
-# -----------------------------
-st.title("📊 Dashboard Interativo (bonito, rápido, acionável)")
-st.caption("Suba seu CSV/Excel, escolha a métrica e explore com filtros. Sem tabelas feias, sem gráfico morto.")
+st.markdown(
+    f"""
+    <div class="topbar">
+      <div>
+        <p class="title">Itacibá • Carteira de Crédito</p>
+        <p class="subtitle">Orçado x Realizado (2025) • Orçado (2026) • filtros por período e produto</p>
+      </div>
+      <div class="pill">
+        <span style="color:{BRAND["blue"]}; font-weight:800;">● Orçado</span>
+        <span style="color:{BRAND["green"]}; font-weight:800;">● Realizado</span>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
-    st.header("Controles")
-    uploaded = st.file_uploader("Upload do dataset (CSV ou Excel)", type=["csv", "xlsx", "xls"])
-    theme = st.toggle("Dark mode", value=False)
-    template = PLOTLY_TEMPLATE_DARK if theme else PLOTLY_TEMPLATE_LIGHT
+    st.markdown("### Dados")
+    uploaded = st.file_uploader("Anexe o relatório (CSV exportado)", type=["csv"])
+
+    st.divider()
+    st.markdown("### Filtros")
+    periodo = st.radio("Período", ["Total", "Ano", "Mês"], horizontal=True)
 
 if not uploaded:
-    st.info("Faça upload de um arquivo para começar.")
+    st.info("Anexe o CSV do relatório para montar o dashboard.")
     st.stop()
 
-try:
-    df_raw = load_data(uploaded)
-except Exception as e:
-    st.error(f"Erro ao carregar arquivo: {e}")
+df = parse_relatorio(uploaded)
+if df.empty:
+    st.error("Não consegui interpretar o CSV. Verifique se é o relatório exportado no mesmo padrão.")
     st.stop()
 
-# Detecta colunas
-num_cols = _numeric_cols(df_raw)
-cat_cols = _categorical_cols(df_raw)
-dt_guess = _guess_datetime_cols(df_raw)
+# Período
+years = sorted(df["ano"].unique().tolist())
+with st.sidebar:
+    ano_sel = None
+    mes_sel = None
+    if periodo in ["Ano", "Mês"]:
+        ano_sel = st.selectbox("Ano", years, index=0)
+    if periodo == "Mês":
+        mes_sel = st.selectbox("Mês", list(range(1, 13)), index=0)
 
-if len(num_cols) == 0:
-    st.error("Não encontrei colunas numéricas para usar como métrica (KPI).")
-    st.stop()
+df_time = df.copy()
+if periodo == "Ano" and ano_sel is not None:
+    df_time = df_time[df_time["ano"] == ano_sel]
+if periodo == "Mês" and ano_sel is not None and mes_sel is not None:
+    df_time = df_time[(df_time["ano"] == ano_sel) & (df_time["mes"] == mes_sel)]
+
+# Produtos
+products = df[["produto_cod", "produto"]].drop_duplicates().sort_values("produto")
+default_codes = [c for c in ["18201", "18202"] if c in set(products["produto_cod"])]
 
 with st.sidebar:
-    metric_col = st.selectbox("Métrica (KPI)", options=num_cols, index=0)
+    selected = st.multiselect(
+        "Produtos (multi)",
+        options=products["produto_cod"].tolist(),
+        default=default_codes,
+        format_func=lambda c: products.loc[products["produto_cod"] == c, "produto"].iloc[0],
+    )
 
-    date_col = st.selectbox("Coluna de data (opcional)", options=["(nenhuma)"] + dt_guess, index=0)
-    date_col = None if date_col == "(nenhuma)" else date_col
+selected_set, warn_list = safe_drop_totals(set(selected))
+for w in warn_list:
+    st.warning(w)
 
-    cat_col = st.selectbox("Dimensão (categoria) (opcional)", options=["(nenhuma)"] + cat_cols, index=0)
-    cat_col = None if cat_col == "(nenhuma)" else cat_col
+dff = df_time[df_time["produto_cod"].isin(selected_set)] if selected_set else df_time.copy()
+prod_label = selected_products_label(products, selected_set)
 
-    agg = st.radio("Agregação", options=["Soma", "Média"], horizontal=True)
-    top_n = st.slider("Top N (ranking)", min_value=5, max_value=30, value=10, step=1)
+# ==========================================================
+# KPIs
+# ==========================================================
+saldo_last_real_dt = last_real_date_with_data(dff, "Saldo", "realizado", eps=0.0001)
+saldo_real_last = sum_at_date(dff, "Saldo", "realizado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
+saldo_orc_same = sum_at_date(dff, "Saldo", "orcado", saldo_last_real_dt) if saldo_last_real_dt is not None else np.nan
+saldo_gap = (saldo_real_last - saldo_orc_same) if saldo_last_real_dt is not None else np.nan
 
-# Coerção de data se existir
-df = df_raw.copy()
-if date_col:
-    df = _coerce_datetime(df, date_col)
+r = dff[dff["tipo"] == "Rendas"]
+rendas_orc = float(r["orcado"].sum(skipna=True))
+rendas_real = float(r["realizado"].sum(min_count=1))
 
-# -----------------------------
-# Filtros no sidebar (minimalistas)
-# -----------------------------
-with st.sidebar:
-    st.divider()
-    st.subheader("Filtros")
+saldo_farol_txt, saldo_farol_color = kpi_status(saldo_real_last, saldo_orc_same)
+rendas_farol_txt, rendas_farol_color = kpi_status(rendas_real, rendas_orc)
 
-    # filtro de data
-    if date_col and date_col in df.columns and df[date_col].notna().any():
-        min_d = df[date_col].min()
-        max_d = df[date_col].max()
-        if pd.notna(min_d) and pd.notna(max_d):
-            d1, d2 = st.date_input(
-                "Intervalo de datas",
-                value=(min_d.date(), max_d.date()),
-                min_value=min_d.date(),
-                max_value=max_d.date(),
-            )
-            df = df[(df[date_col].dt.date >= d1) & (df[date_col].dt.date <= d2)]
+base_txt = saldo_last_real_dt.strftime("%b/%Y") if saldo_last_real_dt is not None else "—"
 
-    # filtro de categoria
-    if cat_col and cat_col in df.columns:
-        options = sorted([x for x in df[cat_col].dropna().unique().tolist()])[:5000]
-        selected = st.multiselect(f"Filtrar {cat_col}", options=options, default=options[: min(len(options), 12)]))
-        if selected:
-            df = df[df[cat_col].isin(selected)]
+st.markdown('<p class="section-title">KPIs</p>', unsafe_allow_html=True)
 
-    # filtro de faixa numérica
-    if metric_col in df.columns and df[metric_col].notna().any():
-        lo = float(df[metric_col].quantile(0.01))
-        hi = float(df[metric_col].quantile(0.99))
-        if np.isfinite(lo) and np.isfinite(hi) and lo < hi:
-            r = st.slider(f"Faixa de {metric_col} (p1–p99)", min_value=lo, max_value=hi, value=(lo, hi))
-            df = df[df[metric_col].between(r[0], r[1], inclusive="both")]
-
-# -----------------------------
-# Layout principal
-# -----------------------------
-left, right = st.columns([1.2, 1])
-
-with left:
-    st.subheader("Visão executiva")
-    kpi_row(df, metric_col)
-
-    story = quick_story(df, metric_col, date_col, cat_col, agg)
-    st.markdown("### O que os dados estão dizendo")
-    for b in story:
-        st.markdown(b)
-
-with right:
-    st.subheader("Preview do dado (limpo)")
-    st.dataframe(df.head(50), use_container_width=True, height=320)
-
-st.divider()
-
-c1, c2 = st.columns(2)
+c1, c2, c3, c4 = st.columns(4, gap="small")
 
 with c1:
-    fig_ts = plot_timeseries(df, date_col, metric_col, agg, template) if date_col else None
-    if fig_ts:
-        st.plotly_chart(fig_ts, use_container_width=True)
-    else:
-        st.info("Selecione uma coluna de data para ver tendência temporal.")
+    st.markdown(
+        f"""
+        <div class="kpi-card-native">
+          <div class="kpi-label">Saldo • Realizado (último mês com dado)</div>
+          <p class="kpi-value">{fmt_br(saldo_real_last)}</p>
+          {badge_html(saldo_farol_txt, saldo_farol_color)}
+          <div class="kpi-sub">Base: <b>{base_txt}</b></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 with c2:
-    fig_rank = plot_category_rank(df, cat_col, metric_col, agg, top_n, template) if cat_col else None
-    if fig_rank:
-        st.plotly_chart(fig_rank, use_container_width=True)
-    else:
-        st.info("Selecione uma dimensão categórica para ver ranking por categoria.")
-
-c3, c4 = st.columns(2)
+    st.markdown(
+        f"""
+        <div class="kpi-card-native">
+          <div class="kpi-label">Saldo • Gap vs Orçado (mesmo mês)</div>
+          <p class="kpi-value">{fmt_br(saldo_gap)}</p>
+          <div class="kpi-sub">Comparação no mês-base do realizado.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 with c3:
-    fig_dist = plot_distribution(df, metric_col, template)
-    if fig_dist:
-        st.plotly_chart(fig_dist, use_container_width=True)
+    st.markdown(
+        f"""
+        <div class="kpi-card-native">
+          <div class="kpi-label">Rendas • Orçado (acumulado no recorte)</div>
+          <p class="kpi-value">{fmt_br(rendas_orc)}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 with c4:
-    fig_corr = plot_corr(df, template)
-    if fig_corr:
-        st.plotly_chart(fig_corr, use_container_width=True)
-    else:
-        st.info("Correlação aparece quando houver pelo menos 3 colunas numéricas úteis.")
+    st.markdown(
+        f"""
+        <div class="kpi-card-native">
+          <div class="kpi-label">Rendas • Realizado (acumulado no recorte)</div>
+          <p class="kpi-value">{fmt_br(rendas_real)}</p>
+          {badge_html(rendas_farol_txt, rendas_farol_color)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-st.caption("Dica: quando você me disser o público e a decisão que o dashboard precisa suportar, eu adapto layout, KPIs e narrativa (storytelling) para isso.")
+# ==========================================================
+# Saldo chart
+# ==========================================================
+st.markdown('<p class="section-title">Evolução • Saldo da Carteira</p>', unsafe_allow_html=True)
+st.markdown(f'<div class="pill"><span style="opacity:.8">Produtos:</span> <b>{prod_label}</b></div>', unsafe_allow_html=True)
+
+s_saldo = series_for(dff, "Saldo")
+if s_saldo.empty:
+    st.info("Sem dados de Saldo nesse recorte.")
+else:
+    st.plotly_chart(bar_line_figure(s_saldo), use_container_width=True)
+
+# ==========================================================
+# Rendas chart
+# ==========================================================
+st.markdown('<p class="section-title">Evolução • Rendas da Carteira</p>', unsafe_allow_html=True)
+st.markdown(f'<div class="pill"><span style="opacity:.8">Produtos:</span> <b>{prod_label}</b></div>', unsafe_allow_html=True)
+
+s_rendas = series_for(dff, "Rendas")
+if s_rendas.empty:
+    st.info("Sem dados de Rendas nesse recorte.")
+else:
+    st.plotly_chart(bar_line_figure(s_rendas), use_container_width=True)
+
+# ==========================================================
+# Representatividade (Top 5 Rendas) - no recorte de tempo
+# ==========================================================
+st.markdown('<p class="section-title">Representatividade • Produtos (Rendas)</p>', unsafe_allow_html=True)
+
+rep = top5_representatividade_rendas(df_time)
+if rep.empty:
+    st.info("Sem dados suficientes de Rendas para calcular representatividade neste recorte.")
+else:
+    metric_lbl = "Realizado" if rep["metric"].iloc[0] == "realizado" else "Orçado"
+    st.markdown(
+        f'<div class="pill"><span style="opacity:.8">Base:</span> <b>Rendas ({metric_lbl})</b></div>',
+        unsafe_allow_html=True,
+    )
+    st.plotly_chart(representatividade_figure(rep), use_container_width=True)
+    st.caption("Top 5 + Outros. TOTAL 18202 é excluído para evitar distorção.")
