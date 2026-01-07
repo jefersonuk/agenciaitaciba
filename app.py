@@ -760,7 +760,7 @@ def render_kpi(
       <div class="kpi-value">{value}</div>
       {badge_html}
       {sub_html}
-    </div>
+    
     """).strip()
 
     with col:
