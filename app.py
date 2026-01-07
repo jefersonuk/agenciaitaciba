@@ -805,7 +805,7 @@ render_kpi(
     badge_color=rendas_farol_color if rendas_last_dt is not None else None,
 )
 
-st.markdown("<br>", unsafe_allow_html=True)
+
 
 
 # ==========================
