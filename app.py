@@ -45,9 +45,6 @@ st.set_page_config(
 st.markdown(
     f"""
 <style>
-/* =========================
-   Base / App container
-========================= */
 div[data-testid="stAppViewContainer"] {{
   background: radial-gradient(1200px 700px at 20% 10%, rgba(30,10,232,0.18), transparent 60%),
               radial-gradient(900px 600px at 85% 0%, rgba(0,171,22,0.14), transparent 55%),
@@ -69,9 +66,6 @@ section[data-testid="stSidebar"] {{
   padding-bottom: 2rem;
 }}
 
-/* =========================
-   Header
-========================= */
 .header-wrap {{
   border: 1px solid {BRAND["border"]};
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
@@ -113,9 +107,6 @@ section[data-testid="stSidebar"] {{
   display:inline-block;
 }}
 
-/* =========================
-   Sections / KPI / Pills
-========================= */
 .section-title {{
   font-size: 18px;
   font-weight: 900;
@@ -140,7 +131,7 @@ section[data-testid="stSidebar"] {{
 
 .kpi-value {{
   font-size: 20px;
-  font-weight: 1000;
+  font-weight: 900;
   margin: 6px 0 8px 0;
   letter-spacing: -0.3px;
 }}
@@ -175,9 +166,6 @@ section[data-testid="stSidebar"] {{
   margin: 2px 0 10px 0;
 }}
 
-/* =========================
-   Chart Card
-========================= */
 .chart-card {{
   border: 1px solid {BRAND["border"]};
   background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
@@ -205,28 +193,30 @@ PT_MONTH = {
     "Jul": 7, "Ago": 8, "Set": 9, "Out": 10, "Nov": 11, "Dez": 12
 }
 
+MONTH_NUM_TO_LABEL = {v: k for k, v in PT_MONTH.items()}
+
+
 def parse_ptbr_number(x):
     if x is None or (isinstance(x, float) and np.isnan(x)):
         return np.nan
     s = str(x).strip()
     if s == "" or s.lower() == "nan":
         return np.nan
-    # remove espaços estranhos
     s = re.sub(r"\s+", "", s)
-    # remove milhar . e troca , por .
     s = s.replace(".", "").replace(",", ".")
     try:
         return float(s)
     except:
         return np.nan
 
+
 def fmt_br(v):
     if v is None or (isinstance(v, float) and np.isnan(v)):
         return "—"
-    # formato BR com separador milhar e decimal
     s = f"{v:,.2f}"
     s = s.replace(",", "X").replace(".", ",").replace("X", ".")
     return s
+
 
 def fmt_compact(v):
     if v is None or (isinstance(v, float) and np.isnan(v)):
@@ -238,10 +228,12 @@ def fmt_compact(v):
         return f"{v/1_000:.0f}k".replace(".", ",")
     return f"{v:.0f}".replace(".", ",")
 
+
 def month_label(dt_):
-    if pd.isna(dt_):
+    if pd.isna(dt_) or dt_ is None:
         return "—"
     return dt_.strftime("%b/%Y")
+
 
 def type_from_code(code_str: str) -> str:
     if code_str.startswith("18201"):
@@ -249,6 +241,7 @@ def type_from_code(code_str: str) -> str:
     if code_str.startswith("18202"):
         return "Rendas"
     return "Outro"
+
 
 def make_plotly_layout_base():
     return dict(
@@ -283,33 +276,29 @@ def make_plotly_layout_base():
 # ==========================
 @st.cache_data(show_spinner=False)
 def load_report(file_bytes: bytes) -> pd.DataFrame:
-    # lê como latin1 porque o CSV exportado costuma vir assim
     from io import BytesIO
     bio = BytesIO(file_bytes)
     raw = pd.read_csv(bio, sep=None, engine="python", encoding="latin1")
 
     # --------------------------
-    # 2025: col0=cód, col1=descrição, meses em blocos de 4
+    # 2025
     # --------------------------
     col_code_2025 = raw.columns[0]
     col_desc_2025 = raw.columns[1]
 
-    # meses 2025 ficam de Unnamed:2 até Unnamed:49 (12 meses x 4 colunas)
-    # header row 0 tem os rótulos dos meses
     month_start_cols = []
     for c in raw.columns[2:50]:
         if str(raw.loc[0, c]) in PT_MONTH.keys():
             month_start_cols.append(c)
 
-    # mapeia cada mês -> colunas [orcado, realizado, var_r, var_pct]
     blocks_2025 = []
     for start in month_start_cols:
         idx = raw.columns.get_loc(start)
-        block_cols = raw.columns[idx:idx+4]
+        block_cols = raw.columns[idx:idx + 4]
         mon = str(raw.loc[0, start]).strip()
         blocks_2025.append((mon, block_cols.tolist()))
 
-    data_rows_2025 = raw.iloc[2:64].copy()  # linhas de produtos
+    data_rows_2025 = raw.iloc[2:64].copy()
 
     recs = []
     for _, r in data_rows_2025.iterrows():
@@ -317,7 +306,6 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
         if code.lower() == "nan" or code == "" or code == "None":
             continue
         desc = str(r[col_desc_2025]).strip()
-        # normaliza espaços
         desc = re.sub(r"\s+", " ", desc).strip()
 
         for mon, cols in blocks_2025:
@@ -341,32 +329,26 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
     df_2025 = pd.DataFrame(recs)
 
     # --------------------------
-    # 2026: colunas 50-65 com (cód/descrição + Jan..Dez + Total)
-    # header row 0 tem meses; dados começam na linha 1
+    # 2026
     # --------------------------
-    # tenta detectar a coluna do "Cód" da seção 2026
-    # no arquivo enviado, é Unnamed:50 e Unnamed:51
     code_col_2026 = None
     desc_col_2026 = None
     for c in raw.columns:
         if str(raw.loc[0, c]).strip() == "Cód":
             code_col_2026 = c
-            # a próxima costuma ser Descrição
             idx = raw.columns.get_loc(c)
             if idx + 1 < len(raw.columns):
                 desc_col_2026 = raw.columns[idx + 1]
             break
 
     if code_col_2026 is not None and desc_col_2026 is not None:
-        # meses 2026 começam 2 colunas após descrição
         idx_code = raw.columns.get_loc(code_col_2026)
-        # procura o primeiro mês após a descrição
         month_cols_2026 = []
-        for c in raw.columns[idx_code+3:]:
+        for c in raw.columns[idx_code + 3:]:
             lab = str(raw.loc[0, c]).strip()
             if lab in PT_MONTH:
                 month_cols_2026.append((lab, c))
-        # remove Total se estiver presente no header (Total não está no PT_MONTH)
+
         data_rows_2026 = raw.iloc[1:64].copy()
 
         recs2 = []
@@ -389,7 +371,7 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
                         "produto": desc,
                         "tipo": type_from_code(code),
                         "orcado": orc,
-                        "realizado": np.nan,  # não existe realizado em 2026 no relatório
+                        "realizado": np.nan,
                     }
                 )
 
@@ -399,12 +381,10 @@ def load_report(file_bytes: bytes) -> pd.DataFrame:
 
     df = pd.concat([df_2025, df_2026], ignore_index=True)
 
-    # limpeza final
     df["produto_cod"] = df["produto_cod"].astype(str)
     df["produto"] = df["produto"].astype(str)
     df["tipo"] = df["tipo"].astype(str)
 
-    # remove linhas completamente vazias
     df = df[~(df["orcado"].isna() & df["realizado"].isna())].copy()
     df.sort_values(["data", "produto_cod"], inplace=True)
 
@@ -431,16 +411,12 @@ def make_evolucao_figure(df_view: pd.DataFrame, tipo: str, title: str, prod_labe
         realizado=("realizado", lambda s: float(np.nansum(s.values)) if s.notna().any() else np.nan),
     )
 
-    # regra: não “descer” pra zero quando ainda não há realizado
-    # considera como "dado concreto" valores != 0 e não-NaN
     mask_data = agg["realizado"].notna() & (agg["realizado"].abs() > 0)
     if mask_data.any():
         last_dt = agg.loc[mask_data, "data"].max()
         agg.loc[agg["data"] > last_dt, "realizado"] = np.nan
-        # se o mês seguinte está 0 (caso Dez/2025), também vira NaN
         agg.loc[(agg["data"] > last_dt) & (agg["realizado"] == 0), "realizado"] = np.nan
     else:
-        # sem realizado ainda
         agg["realizado"] = np.nan
 
     fig = go.Figure()
@@ -481,19 +457,17 @@ def make_evolucao_figure(df_view: pd.DataFrame, tipo: str, title: str, prod_labe
     return fig
 
 
-def top5_representatividade_rendas(df_view: pd.DataFrame) -> pd.DataFrame:
-    x = df_view[df_view["tipo"] == "Rendas"].copy()
+def top5_representatividade_rendas(df_base: pd.DataFrame) -> pd.DataFrame:
+    x = df_base[df_base["tipo"] == "Rendas"].copy()
     if x.empty:
         return pd.DataFrame()
 
-    # Considera apenas 18202* e exclui TOTAL 18202 para evitar distorção
     x["produto_cod"] = x["produto_cod"].astype(str)
     x = x[x["produto_cod"].str.startswith("18202")]
     x = x[x["produto_cod"] != "18202"]
     if x.empty:
         return pd.DataFrame()
 
-    # métrica: Realizado se existir (no recorte), senão Orçado
     has_real = x["realizado"].notna().any() and float(np.nansum(x["realizado"].values)) > 0
     metric = "realizado" if has_real else "orcado"
 
@@ -578,7 +552,7 @@ def representatividade_figure(rep: pd.DataFrame) -> go.Figure:
     fig.update_layout(**layout)
 
     xmax = float(rep_plot["valor"].max()) if len(rep_plot) else 0
-    fig.update_xaxes(range=[0, xmax * 1.18])
+    fig.update_xaxes(range=[0, xmax * 1.18 if xmax > 0 else 1])
 
     return fig
 
@@ -595,17 +569,14 @@ if uploaded is None:
 
 df = load_report(uploaded.getvalue())
 
-# lista de produtos para filtro
 produtos = (
     df[["produto_cod", "produto"]]
     .drop_duplicates()
     .sort_values(["produto_cod"])
 )
-
 produtos["label"] = produtos["produto_cod"] + " - " + produtos["produto"]
 prod_labels = produtos["label"].tolist()
 
-# defaults: totais 18201 e 18202 se existirem
 default_sel = []
 for cod in ["18201", "18202"]:
     match = produtos[produtos["produto_cod"] == cod]
@@ -613,7 +584,6 @@ for cod in ["18201", "18202"]:
         default_sel.append(match["label"].iloc[0])
 
 st.sidebar.markdown("## Filtros")
-
 periodo = st.sidebar.radio("Período", ["Total", "Ano", "Mês"], horizontal=True)
 
 anos = sorted(df["ano"].unique().tolist())
@@ -621,34 +591,35 @@ ano_sel = None
 mes_sel = None
 
 if periodo in ["Ano", "Mês"]:
-    ano_sel = st.sidebar.selectbox("Ano", anos, index=len(anos)-1)
+    ano_sel = st.sidebar.selectbox("Ano", anos, index=len(anos) - 1)
 
 if periodo == "Mês":
     meses_no_ano = sorted(df[df["ano"] == ano_sel]["mes"].unique().tolist())
     mes_sel = st.sidebar.selectbox(
         "Mês",
         meses_no_ano,
-        format_func=lambda m: [k for k,v in PT_MONTH.items() if v == m][0]
+        format_func=lambda m: MONTH_NUM_TO_LABEL.get(int(m), str(m)),
     )
 
 prod_sel = st.sidebar.multiselect("Produto (multi)", prod_labels, default=default_sel)
 
+
 # ==========================
 # Aplica filtros
 # ==========================
-df_view = df.copy()
-
+# df_period: somente período (sem filtro de produto)
+df_period = df.copy()
 if periodo == "Ano":
-    df_view = df_view[df_view["ano"] == ano_sel]
+    df_period = df_period[df_period["ano"] == ano_sel]
 elif periodo == "Mês":
-    df_view = df_view[(df_view["ano"] == ano_sel) & (df_view["mes"] == mes_sel)]
+    df_period = df_period[(df_period["ano"] == ano_sel) & (df_period["mes"] == mes_sel)]
 
+# df_view: período + produto
+df_view = df_period.copy()
 if prod_sel:
-    # mapeia label -> cod
     cod_sel = [p.split(" - ")[0].strip() for p in prod_sel]
     df_view = df_view[df_view["produto_cod"].isin(cod_sel)]
 
-# label curto para legenda (produto selecionado)
 if not prod_sel:
     prod_label = "Todos"
 else:
@@ -683,27 +654,32 @@ st.markdown(
 # ==========================
 st.markdown('<div class="section-title">KPIs</div>', unsafe_allow_html=True)
 
-# Saldo: último mês com dado concreto (realizado != 0 e não-NaN)
 saldo = df_view[df_view["tipo"] == "Saldo"].copy()
 rendas = df_view[df_view["tipo"] == "Rendas"].copy()
+
 
 def last_real_month(d: pd.DataFrame):
     if d.empty:
         return None
-    g = d.groupby("data", as_index=False).agg(real=("realizado", lambda s: float(np.nansum(s.values)) if s.notna().any() else np.nan))
+    g = d.groupby("data", as_index=False).agg(
+        real=("realizado", lambda s: float(np.nansum(s.values)) if s.notna().any() else np.nan)
+    )
     mask = g["real"].notna() & (g["real"].abs() > 0)
     if not mask.any():
         return None
     return g.loc[mask, "data"].max()
 
+
 def value_at_month(d: pd.DataFrame, dt_: pd.Timestamp, col: str):
     if d.empty or dt_ is None:
         return np.nan
-    g = d.groupby("data", as_index=False).agg(val=(col, lambda s: float(np.nansum(s.values)) if s.notna().any() else np.nan))
+    g = d.groupby("data", as_index=False).agg(
+        val=(col, lambda s: float(np.nansum(s.values)) if s.notna().any() else np.nan)
+    )
     row = g[g["data"] == dt_]
     return float(row["val"].iloc[0]) if not row.empty else np.nan
 
-# Saldo KPIs
+
 saldo_last_dt = last_real_month(saldo)
 saldo_real_last = value_at_month(saldo, saldo_last_dt, "realizado")
 saldo_orc_last = value_at_month(saldo, saldo_last_dt, "orcado")
@@ -714,7 +690,7 @@ saldo_farol_txt = "Cumprido" if saldo_ok else "Não cumprido"
 saldo_farol_color = BRAND["ok"] if saldo_ok else BRAND["danger"]
 base_txt = month_label(saldo_last_dt)
 
-# Rendas KPIs (acumulado)
+
 def acumulado(d: pd.DataFrame, col: str, upto_dt: pd.Timestamp = None):
     if d.empty:
         return 0.0
@@ -723,17 +699,19 @@ def acumulado(d: pd.DataFrame, col: str, upto_dt: pd.Timestamp = None):
         x = x[x["data"] <= upto_dt]
     if x.empty:
         return 0.0
-    g = x.groupby("data", as_index=False).agg(val=(col, lambda s: float(np.nansum(s.values)) if s.notna().any() else np.nan))
-    # soma ignorando NaN
+    g = x.groupby("data", as_index=False).agg(
+        val=(col, lambda s: float(np.nansum(s.values)) if s.notna().any() else np.nan)
+    )
     return float(np.nansum(g["val"].values))
+
 
 rendas_last_dt = last_real_month(rendas)
 rendas_orc = acumulado(rendas, "orcado", upto_dt=None)
 rendas_real = acumulado(rendas, "realizado", upto_dt=None)
 
-# farol justo: compara até o último mês com dado (se existir)
 rendas_orc_base = acumulado(rendas, "orcado", upto_dt=rendas_last_dt) if rendas_last_dt is not None else np.nan
 rendas_real_base = acumulado(rendas, "realizado", upto_dt=rendas_last_dt) if rendas_last_dt is not None else np.nan
+
 rendas_ok = False
 if rendas_last_dt is not None and (not np.isnan(rendas_orc_base)) and (not np.isnan(rendas_real_base)):
     rendas_ok = rendas_real_base >= rendas_orc_base
@@ -742,23 +720,33 @@ rendas_farol_txt = "Cumprido" if rendas_ok else "Não cumprido"
 rendas_farol_color = BRAND["ok"] if rendas_ok else BRAND["danger"]
 rendas_base_txt = month_label(rendas_last_dt) if rendas_last_dt is not None else "—"
 
-c1, c2, c3, c4 = st.columns(4, gap="small")
 
 def render_kpi(col, title, value, badge_text=None, badge_color=None, sub=None):
+    badge_html = ""
+    if badge_text:
+        badge_html = f"""
+        <div class="badge" style="color:{badge_color}">
+          <span class="dot" style="background:{badge_color}"></span>
+          <span>{badge_text}</span>
+        </div>
+        """
+
+    sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
+
+    # Importante: tudo em UMA chamada (senão o card não engloba)
+    html = f"""
+    <div class="kpi-card">
+      <div class="kpi-label">{title}</div>
+      <div class="kpi-value">{value}</div>
+      {badge_html}
+      {sub_html}
+    </div>
+    """
     with col:
-        st.markdown('<div class="kpi-card">', unsafe_allow_html=True)
-        st.markdown(f'<div class="kpi-label">{title}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="kpi-value">{value}</div>', unsafe_allow_html=True)
+        st.markdown(html, unsafe_allow_html=True)
 
-        if badge_text:
-            st.markdown(
-                f'<div class="badge" style="color:{badge_color}">● {badge_text}</div>',
-                unsafe_allow_html=True,
-            )
-        if sub:
-            st.markdown(f'<div class="kpi-sub">{sub}</div>', unsafe_allow_html=True)
 
-        st.markdown("</div>", unsafe_allow_html=True)
+c1, c2, c3, c4 = st.columns(4, gap="small")
 
 render_kpi(
     c1,
@@ -791,18 +779,16 @@ render_kpi(
     rendas_farol_color if rendas_last_dt is not None else None,
 )
 
-
 st.markdown("<hr/>", unsafe_allow_html=True)
 
 
 # ==========================
-# Charts (1 embaixo do outro)
+# Charts
 # ==========================
-# Chip de produtos selecionados (melhor que enfiar no legend)
 if prod_sel:
     shown = " • ".join([p.split(" - ", 1)[0] for p in prod_sel[:4]])
     if len(prod_sel) > 4:
-        shown += f" • +{len(prod_sel)-4}"
+        shown += f" • +{len(prod_sel) - 4}"
 else:
     shown = "Todos"
 
@@ -829,7 +815,8 @@ st.markdown("</div>", unsafe_allow_html=True)
 # ==========================
 st.markdown('<div class="section-title">Representatividade • Produtos (Rendas)</div>', unsafe_allow_html=True)
 
-rep = top5_representatividade_rendas(df_view)
+# Importante: representatividade ignora filtro de produto (usa df_period)
+rep = top5_representatividade_rendas(df_period)
 
 if rep.empty:
     st.info("Sem dados suficientes de Rendas para calcular representatividade neste recorte.")
