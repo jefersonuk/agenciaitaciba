@@ -727,38 +727,34 @@ rendas_farol_color = BRAND["ok"] if rendas_ok else BRAND["danger"]
 rendas_base_txt = month_label(rendas_last_dt) if rendas_last_dt is not None else "—"
 
 
-def render_kpi(col, title, value, badge_text=None, badge_color=None, sub_label=None, sub_value=None):
+from textwrap import dedent
+
+def render_kpi(col, title, value, badge_text=None, badge_color=None, sub=None):
     badge_html = ""
     if badge_text:
-        badge_html = f"""
+        badge_html = dedent(f"""
         <div class="badge" style="color:{badge_color}">
           <span class="dot" style="background:{badge_color}"></span>
           <span>{badge_text}</span>
         </div>
-        """
+        """).strip()
 
     sub_html = ""
-    if sub_label is not None or sub_value is not None:
-        # sem HTML vindo de variável “solta”; negrito vem do <b> controlado aqui
-        _label = (sub_label or "").strip()
-        _value = (sub_value or "").strip()
-        if _label and _value:
-            sub_html = f'<div class="kpi-sub">{_label} <b>{_value}</b></div>'
-        elif _label:
-            sub_html = f'<div class="kpi-sub">{_label}</div>'
-        else:
-            sub_html = f'<div class="kpi-sub"><b>{_value}</b></div>'
+    if sub:
+        sub_html = f'<div class="kpi-sub">{sub}</div>'
 
-    html = f"""
+    html = dedent(f"""
     <div class="kpi-card">
       <div class="kpi-label">{title}</div>
       <div class="kpi-value">{value}</div>
       {badge_html}
       {sub_html}
     </div>
-    """
+    """).strip()
+
     with col:
         st.markdown(html, unsafe_allow_html=True)
+
 
 
 c1, c2, c3, c4 = st.columns(4, gap="small")
