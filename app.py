@@ -284,7 +284,7 @@ def render_header(title: str, subtitle: str):
   <div>
     <div class="header-title">{title}</div>
     <div class="header-sub">{subtitle}</div>
-  
+  </div>
   <div class="legend-pill">
     <span><span class="dot" style="background:{BRAND["blue"]}"></span> Orçado</span>
     <span><span class="dot" style="background:{BRAND["green"]}"></span> Realizado</span>
@@ -677,7 +677,7 @@ def render_kpi(col, title, value, badge_text=None, badge_color=None, sub_label=N
         <div class="badge" style="color:{badge_color}">
           <span class="dot" style="background:{badge_color}"></span>
           <span>{badge_text}</span>
-        </div>
+       
         """).strip()
 
     sub_html = ""
