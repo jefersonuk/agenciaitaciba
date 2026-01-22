@@ -289,7 +289,7 @@ def render_header(title: str, subtitle: str):
     <span><span class="dot" style="background:{BRAND["blue"]}"></span> Orçado</span>
     <span><span class="dot" style="background:{BRAND["green"]}"></span> Realizado</span>
   </div>
-</div>
+
 """,
         unsafe_allow_html=True,
     )
