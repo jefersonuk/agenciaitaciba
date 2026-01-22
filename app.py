@@ -289,6 +289,7 @@ def render_header(title: str, subtitle: str):
     <span><span class="dot" style="background:{BRAND["blue"]}"></span> Orçado</span>
     <span><span class="dot" style="background:{BRAND["green"]}"></span> Realizado</span>
   </div>
+  </div>
 
 """,
         unsafe_allow_html=True,
@@ -926,7 +927,7 @@ def render_carteira_tab():
     st.plotly_chart(make_evolucao_figure(saldo, "Saldo (Orçado x Realizado)", prod_label), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Evolução • Rendas da Carteira</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Evolução • Rendas da Carteira', unsafe_allow_html=True)
     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
     st.plotly_chart(make_evolucao_figure(rendas, "Rendas (Orçado x Realizado)", prod_label), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
