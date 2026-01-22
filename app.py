@@ -927,10 +927,10 @@ def render_carteira_tab():
     st.plotly_chart(make_evolucao_figure(saldo, "Saldo (Orçado x Realizado)", prod_label), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Evolução • Rendas da Carteira', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Evolução • Rendas da Carteira</div>', unsafe_allow_html=True)
     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
     st.plotly_chart(make_evolucao_figure(rendas, "Rendas (Orçado x Realizado)", prod_label), use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown, unsafe_allow_html=True)
 
     st.markdown('<div class="section-title">Representatividade • Produtos (Rendas)</div>', unsafe_allow_html=True)
     rep_base = df_period[df_period["tipo"] == "Rendas"].copy()
