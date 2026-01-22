@@ -284,7 +284,7 @@ def render_header(title: str, subtitle: str):
   <div>
     <div class="header-title">{title}</div>
     <div class="header-sub">{subtitle}</div>
-  </div>
+  
   <div class="legend-pill">
     <span><span class="dot" style="background:{BRAND["blue"]}"></span> Orçado</span>
     <span><span class="dot" style="background:{BRAND["green"]}"></span> Realizado</span>
@@ -930,7 +930,7 @@ def render_carteira_tab():
     st.markdown('<div class="section-title">Evolução • Rendas da Carteira</div>', unsafe_allow_html=True)
     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
     st.plotly_chart(make_evolucao_figure(rendas, "Rendas (Orçado x Realizado)", prod_label), use_container_width=True)
-    st.markdown, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="section-title">Representatividade • Produtos (Rendas)</div>', unsafe_allow_html=True)
     rep_base = df_period[df_period["tipo"] == "Rendas"].copy()
